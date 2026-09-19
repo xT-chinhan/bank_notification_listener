@@ -43,11 +43,23 @@ class BankNotificationListenerService : NotificationListenerService() {
 
         val extras = sbn.notification?.extras
         val packageName = sbn.packageName ?: ""
-        val title = extras?.getCharSequence(Notification.EXTRA_TITLE)?.toString()
+        var title = extras?.getCharSequence(Notification.EXTRA_TITLE)?.toString()
             ?: extras?.getString(Notification.EXTRA_TITLE)
             ?: ""
-        val text = extras?.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
-        val subText = extras?.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString() ?: ""
+        val titleBig = extras?.getCharSequence(Notification.EXTRA_TITLE_BIG)?.toString()
+        if (!titleBig.isNullOrEmpty() && title.isEmpty()) {
+            title = titleBig
+        }
+
+        var text = extras?.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
+        val bigText = extras?.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString()
+        if (bigText != null && (text.isEmpty() || bigText.length > text.length)) {
+            text = bigText
+        }
+
+        val subText = extras?.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString()
+            ?: extras?.getCharSequence(Notification.EXTRA_INFO_TEXT)?.toString()
+            ?: ""
         val postTime = sbn.postTime
 
         val eventMap: Map<String, Any> = mapOf(

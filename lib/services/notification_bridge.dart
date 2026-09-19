@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:uuid/uuid.dart';
 import '../models/raw_notification.dart';
+import 'bank_notification_parser.dart';
 
 class NotificationBridge {
   static const MethodChannel _methodChannel =
@@ -40,14 +41,19 @@ class NotificationBridge {
                   : int.tryParse(rawTimestamp?.toString() ?? '') ??
                       DateTime.now().millisecondsSinceEpoch;
 
+              final packageName = map['packageName']?.toString() ?? '';
+              final title = map['title']?.toString() ?? '';
+              final text = map['text']?.toString() ?? '';
+
               final notification = RawNotification(
                 id: map['id']?.toString() ?? _uuid.v4(),
-                packageName: map['packageName']?.toString() ?? '',
-                title: map['title']?.toString() ?? '',
-                text: map['text']?.toString() ?? '',
+                packageName: packageName,
+                title: title,
+                text: text,
                 subText: map['subText']?.toString(),
                 timestamp: parsedTimestamp,
-                isBankNotification: map['isBankNotification'] == true,
+                isBankNotification: map['isBankNotification'] == true ||
+                    BankNotificationParser.isBankApp(packageName, title, text),
               );
               _controller.add(notification);
             } catch (e, st) {
