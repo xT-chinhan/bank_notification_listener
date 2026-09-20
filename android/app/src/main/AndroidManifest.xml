@@ -1,6 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application
-        android:label="bank_notification_listener"
+        android:label="chinhan-xT"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
@@ -32,8 +32,8 @@
             android:value="2" />
 
         <service
-            android:name=".BankNotificationListenerService"
-            android:label="Bank Notification Listener"
+            android:name=".NotificationMonitorService"
+            android:label="chinhan-xT"
             android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
             android:exported="true">
             <intent-filter>

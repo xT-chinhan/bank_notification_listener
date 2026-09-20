@@ -7,9 +7,9 @@ import 'bank_notification_parser.dart';
 
 class NotificationBridge {
   static const MethodChannel _methodChannel =
-      MethodChannel('vn.finance.notification_listener/methods');
+      MethodChannel('com.chinhan.xt_manager/methods');
   static const EventChannel _eventChannel =
-      EventChannel('vn.finance.notification_listener/events');
+      EventChannel('com.chinhan.xt_manager/events');
 
   static final NotificationBridge _instance = NotificationBridge._internal();
   static NotificationBridge get instance => _instance;
@@ -29,6 +29,7 @@ class NotificationBridge {
   Stream<RawNotification> get notificationStream => _controller.stream;
 
   void _initNativeStream() {
+    if (kIsWeb) return;
     try {
       _nativeSubscription = _eventChannel.receiveBroadcastStream().listen(
         (dynamic event) {
@@ -77,6 +78,7 @@ class NotificationBridge {
 
   /// Check if the Android NotificationListenerService permission has been granted.
   Future<bool> isPermissionGranted() async {
+    if (kIsWeb) return true; // Web simulation mode
     try {
       final bool? result =
           await _methodChannel.invokeMethod<bool>('isPermissionGranted');
@@ -92,12 +94,25 @@ class NotificationBridge {
 
   /// Open Android system settings to allow the user to enable NotificationListenerService.
   Future<void> openSettings() async {
+    if (kIsWeb) return;
     try {
       await _methodChannel.invokeMethod<void>('openPermissionSettings');
     } on PlatformException catch (e) {
       debugPrint('NotificationBridge: Error opening settings: ${e.message}');
     } catch (e) {
       debugPrint('NotificationBridge: Unexpected error opening settings: $e');
+    }
+  }
+
+  /// Open Android App Info screen to unlock "Restricted settings" (dấu 3 chấm ⋮) on Android 13/14/15.
+  Future<void> openAppDetails() async {
+    if (kIsWeb) return;
+    try {
+      await _methodChannel.invokeMethod<void>('openAppDetails');
+    } on PlatformException catch (e) {
+      debugPrint('NotificationBridge: Error opening app details: ${e.message}');
+    } catch (e) {
+      debugPrint('NotificationBridge: Unexpected error opening app details: $e');
     }
   }
 

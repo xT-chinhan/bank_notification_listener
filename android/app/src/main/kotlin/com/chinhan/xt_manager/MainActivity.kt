@@ -1,4 +1,4 @@
-package vn.finance.bank_notification_listener
+package com.chinhan.xt_manager
 
 import android.content.ComponentName
 import android.content.Intent
@@ -11,8 +11,8 @@ import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
-    private val methodChannelName = "vn.finance.notification_listener/methods"
-    private val eventChannelName = "vn.finance.notification_listener/events"
+    private val methodChannelName = "com.chinhan.xt_manager/methods"
+    private val eventChannelName = "com.chinhan.xt_manager/events"
 
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -26,6 +26,10 @@ class MainActivity : FlutterActivity() {
                     openNotificationListenerSettings()
                     result.success(true)
                 }
+                "openAppDetails" -> {
+                    openAppDetailsSettings()
+                    result.success(true)
+                }
                 else -> {
                     result.notImplemented()
                 }
@@ -35,12 +39,12 @@ class MainActivity : FlutterActivity() {
         EventChannel(flutterEngine.dartExecutor.binaryMessenger, eventChannelName).setStreamHandler(
             object : EventChannel.StreamHandler {
                 override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
-                    BankNotificationListenerService.eventSink = events
-                    BankNotificationListenerService.flushPendingEvents()
+                    NotificationMonitorService.eventSink = events
+                    NotificationMonitorService.flushPendingEvents()
                 }
 
                 override fun onCancel(arguments: Any?) {
-                    BankNotificationListenerService.eventSink = null
+                    NotificationMonitorService.eventSink = null
                 }
             }
         )
@@ -70,7 +74,29 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun openNotificationListenerSettings() {
+        val serviceComponent = ComponentName(this, NotificationMonitorService::class.java).flattenToString()
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            try {
+                val detailIntent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS).apply {
+                    putExtra(Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME, serviceComponent)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                startActivity(detailIntent)
+                return
+            } catch (_: Exception) {
+                // Fallback to general listener settings if vendor ROM blocks detail intent
+            }
+        }
+
         val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        startActivity(intent)
+    }
+
+    private fun openAppDetailsSettings() {
+        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+            data = android.net.Uri.fromParts("package", packageName, null)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         startActivity(intent)

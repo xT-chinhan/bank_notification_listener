@@ -1,4 +1,4 @@
-package vn.finance.bank_notification_listener
+package com.chinhan.xt_manager
 
 import android.app.Notification
 import android.os.Handler
@@ -8,7 +8,7 @@ import android.service.notification.StatusBarNotification
 import io.flutter.plugin.common.EventChannel
 import java.util.Collections
 
-class BankNotificationListenerService : NotificationListenerService() {
+class NotificationMonitorService : NotificationListenerService() {
 
     companion object {
         var eventSink: EventChannel.EventSink? = null
@@ -78,5 +78,17 @@ class BankNotificationListenerService : NotificationListenerService() {
                 pendingEvents.add(eventMap)
             }
         }
+    }
+
+    override fun onNotificationRemoved(sbn: StatusBarNotification?) {
+        super.onNotificationRemoved(sbn)
+    }
+
+    override fun onListenerConnected() {
+        super.onListenerConnected()
+    }
+
+    override fun onListenerDisconnected() {
+        super.onListenerDisconnected()
     }
 }

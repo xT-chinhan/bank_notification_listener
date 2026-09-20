@@ -8,7 +8,7 @@ void main() {
 
   group('NotificationBridge Tests', () {
     const MethodChannel methodChannel =
-        MethodChannel('vn.finance.notification_listener/methods');
+        MethodChannel('com.chinhan.xt_manager/methods');
     late List<MethodCall> methodCalls;
 
     setUp(() {

@@ -1,14 +1,15 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../models/parsed_transaction.dart';
 import '../models/raw_notification.dart';
 import '../services/bank_notification_parser.dart';
 import '../services/notification_bridge.dart';
-import '../widgets/simulation_sheet.dart';
 import '../widgets/transaction_card.dart';
 
-/// Main monitoring dashboard screen that captures and displays incoming notifications
-/// in real time, parses financial transactions, and provides simulation testing tools.
+/// Ultra-premium responsive Bank Notification Monitor screen.
+/// Implements adaptive responsive constraints so it maintains a perfect mobile
+/// form factor on all devices and screen sizes (phones, tablets, and desktop Chrome).
 class MonitorScreen extends StatefulWidget {
   const MonitorScreen({super.key});
 
@@ -20,18 +21,19 @@ class _MonitorScreenState extends State<MonitorScreen>
     with WidgetsBindingObserver {
   bool _isPermissionGranted = false;
   bool _isCheckingPermission = true;
-  bool _onlyBankFilter = false;
 
   final List<RawNotification> _notifications = [];
   final Map<String, ParsedTransaction?> _parsedCache = {};
 
   StreamSubscription<RawNotification>? _subscription;
 
+  bool _dialogShownOnce = false;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _checkPermission();
+    _checkPermission(promptIfDenied: true);
     _subscribeToStream();
   }
 
@@ -44,14 +46,12 @@ class _MonitorScreenState extends State<MonitorScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // When the user switches back to this app after opening Android settings,
-    // automatically re-check whether notification listener permission was granted.
     if (state == AppLifecycleState.resumed) {
       _checkPermission();
     }
   }
 
-  Future<void> _checkPermission() async {
+  Future<void> _checkPermission({bool promptIfDenied = false}) async {
     setState(() => _isCheckingPermission = true);
     try {
       final granted = await NotificationBridge.instance.isPermissionGranted();
@@ -60,6 +60,14 @@ class _MonitorScreenState extends State<MonitorScreen>
           _isPermissionGranted = granted;
           _isCheckingPermission = false;
         });
+        if (!granted && promptIfDenied && !_dialogShownOnce) {
+          _dialogShownOnce = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && !_isPermissionGranted) {
+              _promptInitialPermissionDialog();
+            }
+          });
+        }
       }
     } catch (_) {
       if (mounted) {
@@ -68,13 +76,35 @@ class _MonitorScreenState extends State<MonitorScreen>
     }
   }
 
+  void _promptInitialPermissionDialog() {
+    _showThreeStepPermissionPopup(context);
+  }
+
+  /// Deduplicate notifications by package, title, and text content (sorted newest first)
+  List<RawNotification> get _uniqueNotifications {
+    final seen = <String>{};
+    final list = <RawNotification>[];
+    for (final n in _notifications) {
+      final key = '${n.packageName}|${n.title.trim()}|${n.text.trim()}';
+      if (seen.add(key)) {
+        list.add(n);
+      }
+    }
+    list.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    return list;
+  }
+
   void _subscribeToStream() {
     _subscription =
         NotificationBridge.instance.notificationStream.listen((notification) {
       final parsed = BankNotificationParser.parse(notification);
       if (mounted) {
         setState(() {
-          // Keep newest notifications at index 0 (top of the list)
+          // Remove any existing duplicate notification with identical content
+          _notifications.removeWhere((n) =>
+              n.packageName == notification.packageName &&
+              n.title.trim() == notification.title.trim() &&
+              n.text.trim() == notification.text.trim());
           _notifications.insert(0, notification);
           _parsedCache[notification.id] = parsed;
         });
@@ -82,39 +112,30 @@ class _MonitorScreenState extends State<MonitorScreen>
     });
   }
 
-  List<RawNotification> get _filteredList {
-    if (!_onlyBankFilter) return _notifications;
-    return _notifications.where((n) {
-      return _parsedCache[n.id] != null ||
-          n.isBankNotification ||
-          BankNotificationParser.isBankApp(n.packageName, n.title, n.text);
-    }).toList();
-  }
-
-  int get _bankCount {
-    return _notifications.where((n) {
-      return _parsedCache[n.id] != null ||
-          n.isBankNotification ||
-          BankNotificationParser.isBankApp(n.packageName, n.title, n.text);
-    }).length;
-  }
-
   void _confirmClearAll() {
     if (_notifications.isEmpty) return;
     showDialog<void>(
       context: context,
       builder: (dialogCtx) => AlertDialog(
-        title: const Text('Xóa toàn bộ lịch sử?'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: const Text(
+          'Xóa toàn bộ lịch sử?',
+          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
+        ),
         content: Text(
-          'Thao tác này sẽ xóa tất cả ${_notifications.length} thông báo hiện có trên màn hình.',
+          'Thao tác này sẽ xóa sạch ${_notifications.length} thông báo hiện có trên màn hình.',
+          style: const TextStyle(fontSize: 14),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogCtx),
-            child: const Text('Hủy'),
+            child: const Text('Hủy', style: TextStyle(fontWeight: FontWeight.w700)),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFFEF4444),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
             onPressed: () {
               Navigator.pop(dialogCtx);
               setState(() {
@@ -123,13 +144,13 @@ class _MonitorScreenState extends State<MonitorScreen>
               });
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
-                  content: Text('Đã xóa toàn bộ lịch sử thông báo'),
+                  content: Text('✓ Đã xóa toàn bộ lịch sử thông báo'),
                   behavior: SnackBarBehavior.floating,
-                  duration: Duration(seconds: 1),
+                  duration: Duration(seconds: 2),
                 ),
               );
             },
-            child: const Text('Xóa tất cả'),
+            child: const Text('Xóa tất cả', style: TextStyle(fontWeight: FontWeight.w700)),
           ),
         ],
       ),
@@ -139,164 +160,258 @@ class _MonitorScreenState extends State<MonitorScreen>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final items = _filteredList;
+    final isDark = theme.brightness == Brightness.dark;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Bank Notification Monitor',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-            ),
-            Text(
-              'Lắng nghe & bóc tách giao dịch ngân hàng',
-              style: theme.textTheme.bodySmall?.copyWith(
-                fontSize: 11,
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isWideScreen = constraints.maxWidth > 620;
+
+        return Scaffold(
+          backgroundColor: isWideScreen
+              ? (isDark ? const Color(0xFF070A10) : const Color(0xFFE2E8F0))
+              : theme.scaffoldBackgroundColor,
+          body: SafeArea(
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 580),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: theme.scaffoldBackgroundColor,
+                    boxShadow: isWideScreen
+                        ? [
+                            BoxShadow(
+                              color: isDark
+                                  ? Colors.black.withValues(alpha: 0.7)
+                                  : Colors.black.withValues(alpha: 0.12),
+                              blurRadius: 40,
+                              offset: const Offset(0, 16),
+                            ),
+                          ]
+                        : null,
+                  ),
+                  child: Column(
+                    children: [
+                      // Header Section
+                      _buildHeader(context),
+
+                      // Status & Permission Banner (Active 24/7 or Grant Permission)
+                      _buildPermissionWidget(context),
+
+                      const SizedBox(height: 6),
+
+                      // Stream list of cards or clean empty state (deduplicated)
+                      Expanded(
+                        child: () {
+                          final displayList = _uniqueNotifications;
+                          return displayList.isEmpty
+                              ? _buildEmptyState(context)
+                              : ListView.builder(
+                                  physics: const AlwaysScrollableScrollPhysics(),
+                                  padding: const EdgeInsets.only(top: 4, bottom: 30),
+                                  itemCount: displayList.length,
+                                  itemBuilder: (context, index) {
+                                    final notification = displayList[index];
+                                    final parsed = _parsedCache[notification.id];
+                                    return TransactionCard(
+                                      key: ValueKey(notification.id),
+                                      notification: notification,
+                                      parsedTransaction: parsed,
+                                    );
+                                  },
+                                );
+                        }(),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
-          ],
-        ),
-        actions: [
-          IconButton(
-            tooltip: 'Làm mới quyền',
-            icon: const Icon(Icons.refresh_rounded),
-            onPressed: _checkPermission,
           ),
-          IconButton(
-            tooltip: 'Cài đặt quyền',
-            icon: const Icon(Icons.settings_suggest_outlined),
-            onPressed: () => NotificationBridge.instance.openSettings(),
+        );
+      },
+    );
+  }
+
+  /// Elegant Header with Title and Settings Icon
+  Widget _buildHeader(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(22, 20, 18, 14),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'chinhan-xT',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 30,
+                    letterSpacing: -0.8,
+                    color: isDark ? Colors.white : const Color(0xFF0F172A),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Quản lý chi tiêu cá nhân',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 14,
+                    letterSpacing: -0.2,
+                    color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                  ),
+                ),
+              ],
+            ),
           ),
+
+          // Delete History Button (if items exist)
           if (_notifications.isNotEmpty)
-            IconButton(
+            _buildRoundActionButton(
+              icon: Icons.delete_outline_rounded,
               tooltip: 'Xóa lịch sử',
-              icon: const Icon(Icons.delete_sweep_outlined),
-              onPressed: _confirmClearAll,
+              onTap: _confirmClearAll,
+              isDark: isDark,
             ),
+
+          if (_notifications.isNotEmpty) const SizedBox(width: 8),
+
+          // Settings Button (opens permission & settings sheet)
+          _buildRoundActionButton(
+            icon: Icons.tune_rounded,
+            tooltip: 'Cài đặt & Quyền',
+            onTap: () => _showSettingsSheet(context),
+            isDark: isDark,
+          ),
         ],
-      ),
-      body: SafeArea(
-        child: Column(
-          children: [
-            // Status Banner (Permission State)
-            _buildPermissionBanner(context),
-
-            // Filter Bar
-            _buildFilterBar(context),
-
-            const Divider(height: 1),
-
-            // Notification List or Empty State
-            Expanded(
-              child: items.isEmpty
-                  ? _buildEmptyState(context)
-                  : ListView.builder(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      padding: const EdgeInsets.only(top: 8, bottom: 90),
-                      itemCount: items.length,
-                      itemBuilder: (context, index) {
-                        final notification = items[index];
-                        final parsed = _parsedCache[notification.id];
-                        return TransactionCard(
-                          key: ValueKey(notification.id),
-                          notification: notification,
-                          parsedTransaction: parsed,
-                        );
-                      },
-                    ),
-            ),
-          ],
-        ),
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        heroTag: 'fab_simulate',
-        icon: const Icon(Icons.science_rounded, size: 22),
-        label: const Text(
-          'Test Giả Lập Ngân Hàng',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        onPressed: () => SimulationSheet.show(context),
       ),
     );
   }
 
-  Widget _buildPermissionBanner(BuildContext context) {
+  /// 2.5D Round Icon Action Button
+  Widget _buildRoundActionButton({
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback onTap,
+    required bool isDark,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E293B) : Colors.white,
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(
+            color: isDark ? Colors.black.withValues(alpha: 0.3) : const Color(0x0A0F172A),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+        border: Border.all(
+          color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.04),
+        ),
+      ),
+      child: IconButton(
+        icon: Icon(icon, size: 20),
+        tooltip: tooltip,
+        color: isDark ? Colors.white : const Color(0xFF1E293B),
+        onPressed: onTap,
+      ),
+    );
+  }
+
+  /// Permission status indicator & Interactive Banner
+  Widget _buildPermissionWidget(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
     if (_isCheckingPermission) {
       return Container(
-        margin: const EdgeInsets.fromLTRB(14, 10, 14, 6),
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF1E1E24) : Colors.grey.shade100,
-          borderRadius: BorderRadius.circular(12),
+          color: isDark ? const Color(0xFF1E293B) : Colors.white,
+          borderRadius: BorderRadius.circular(18),
         ),
         child: const Row(
           children: [
             SizedBox(
-              width: 16,
-              height: 16,
+              width: 14,
+              height: 14,
               child: CircularProgressIndicator(strokeWidth: 2),
             ),
-            SizedBox(width: 12),
-            Text(
-              'Đang kiểm tra quyền đọc thông báo...',
-              style: TextStyle(fontSize: 13),
+            SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Đang kiểm tra quyền thông báo...',
+                style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),
       );
     }
 
+    // Permission is GRANTED: sleek 2.5D active listening pill
     if (_isPermissionGranted) {
       return Container(
-        margin: const EdgeInsets.fromLTRB(14, 10, 14, 6),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
-          color: isDark
-              ? const Color(0xFF0D2818).withValues(alpha: 0.9)
-              : const Color(0xFFE8F5E9),
-          borderRadius: BorderRadius.circular(12),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: isDark
+                ? const [Color(0xFF064E3B), Color(0xFF062E25)]
+                : const [Color(0xFFECFDF5), Color(0xFFD1FAE5)],
+          ),
+          borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: Colors.green.withValues(alpha: 0.35),
+            color: const Color(0xFF10B981).withValues(alpha: isDark ? 0.4 : 0.3),
             width: 1,
           ),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF10B981).withValues(alpha: 0.1),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
+            ),
+          ],
         ),
         child: Row(
           children: [
             Container(
-              width: 10,
-              height: 10,
+              width: 9,
+              height: 9,
               decoration: const BoxDecoration(
-                color: Color(0xFF22C55E),
+                color: Color(0xFF10B981),
                 shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Color(0xFF10B981),
+                    blurRadius: 6,
+                    spreadRadius: 1,
+                  ),
+                ],
               ),
             ),
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                '🟢 Đang lắng nghe thông báo hệ thống',
+                'Đang hoạt động',
                 style: TextStyle(
-                  color: isDark ? const Color(0xFF86EFAC) : const Color(0xFF15803D),
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 13.5,
+                  letterSpacing: -0.1,
+                  color: isDark ? const Color(0xFF6EE7B7) : const Color(0xFF047857),
                 ),
-              ),
-            ),
-            InkWell(
-              borderRadius: BorderRadius.circular(6),
-              onTap: _checkPermission,
-              child: Padding(
-                padding: const EdgeInsets.all(4),
-                child: Icon(
-                  Icons.refresh_rounded,
-                  size: 18,
-                  color: isDark ? const Color(0xFF86EFAC) : const Color(0xFF15803D),
-                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ],
@@ -304,177 +419,657 @@ class _MonitorScreenState extends State<MonitorScreen>
       );
     }
 
-    // Permission not granted warning banner
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () => NotificationBridge.instance.openSettings(),
-        child: Container(
-          margin: const EdgeInsets.fromLTRB(14, 10, 14, 6),
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: isDark
-                ? const Color(0xFF3B1E08).withValues(alpha: 0.9)
-                : const Color(0xFFFFF7ED),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: Colors.orange.withValues(alpha: 0.5),
-              width: 1.5,
-            ),
+    // Permission NOT GRANTED: 2.5D action card with working grant button
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: isDark
+              ? const [Color(0xFF3B1E08), Color(0xFF281305)]
+              : const [Color(0xFFFFFBEB), Color(0xFFFEF3C7)],
+        ),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(
+          color: const Color(0xFFF59E0B).withValues(alpha: isDark ? 0.4 : 0.3),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFF59E0B).withValues(alpha: 0.12),
+            blurRadius: 14,
+            offset: const Offset(0, 5),
           ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
-              const Icon(
-                Icons.warning_amber_rounded,
-                color: Color(0xFFEA580C),
-                size: 24,
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF59E0B).withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.notifications_paused_rounded,
+                  color: Color(0xFFD97706),
+                  size: 20,
+                ),
               ),
               const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '⚠️ Chưa cấp quyền đọc thông báo',
-                      style: TextStyle(
-                        color: isDark ? const Color(0xFFFDBA74) : const Color(0xFF9A3412),
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'Bấm vào đây để mở Cài đặt và bật quyền cho ứng dụng.',
-                      style: TextStyle(
-                        color: isDark ? Colors.white70 : const Color(0xFFC2410C),
-                        fontSize: 11.5,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              FilledButton.tonal(
-                style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFFEA580C),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  visualDensity: VisualDensity.compact,
-                ),
-                onPressed: () => NotificationBridge.instance.openSettings(),
-                child: const Text(
-                  'Cấp quyền',
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+              const Expanded(
+                child: Text(
+                  'Chưa bật quyền thông báo',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 15,
+                    color: Color(0xFF92400E),
+                  ),
                 ),
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFilterBar(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-      child: Row(
-        children: [
-          FilterChip(
-            selected: !_onlyBankFilter,
-            showCheckmark: false,
-            avatar: Icon(
-              Icons.all_inbox_rounded,
-              size: 16,
-              color: !_onlyBankFilter
-                  ? Theme.of(context).colorScheme.onPrimary
-                  : Theme.of(context).colorScheme.primary,
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFFD97706),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 13),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                elevation: 3,
+              ),
+              icon: const Icon(Icons.touch_app_rounded, size: 18),
+              label: const Text(
+                'Cấp Quyền Ngay (3 Bước Đơn Giản)',
+                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13.5),
+              ),
+              onPressed: () => _showThreeStepPermissionPopup(context),
             ),
-            label: Text('Tất cả thông báo (${_notifications.length})'),
-            onSelected: (selected) {
-              if (selected) setState(() => _onlyBankFilter = false);
-            },
-          ),
-          const SizedBox(width: 8),
-          FilterChip(
-            selected: _onlyBankFilter,
-            showCheckmark: false,
-            avatar: Icon(
-              Icons.account_balance_rounded,
-              size: 16,
-              color: _onlyBankFilter
-                  ? Theme.of(context).colorScheme.onPrimary
-                  : Colors.teal,
-            ),
-            label: Text('Chỉ ngân hàng ($_bankCount)'),
-            onSelected: (selected) {
-              setState(() => _onlyBankFilter = selected);
-            },
           ),
         ],
       ),
     );
   }
 
+  /// Ultra-clean minimal empty state (waiting for live notifications)
   Widget _buildEmptyState(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     return Center(
-      child: SingleChildScrollView(
+      child: Padding(
         padding: const EdgeInsets.all(32),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 96,
-              height: 96,
+              width: 80,
+              height: 80,
               decoration: BoxDecoration(
-                color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: isDark
+                      ? const [Color(0xFF1E293B), Color(0xFF0F172A)]
+                      : const [Color(0xFFFFFFFF), Color(0xFFF1F5F9)],
+                ),
                 shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: isDark ? Colors.black.withValues(alpha: 0.4) : const Color(0x140F172A),
+                    blurRadius: 22,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+                border: Border.all(
+                  color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.04),
+                ),
               ),
-              child: Icon(
-                _onlyBankFilter
-                    ? Icons.account_balance_outlined
-                    : Icons.notifications_none_rounded,
-                size: 48,
-                color: theme.colorScheme.primary,
+              child: const Icon(
+                Icons.notifications_active_outlined,
+                size: 36,
+                color: Color(0xFF10B981),
               ),
             ),
             const SizedBox(height: 20),
             Text(
-              _onlyBankFilter
-                  ? 'Chưa có thông báo ngân hàng nào'
-                  : 'Chưa nhận được thông báo nào',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-                fontSize: 17,
+              'Đang chờ thông báo mới...',
+              style: TextStyle(
+                fontWeight: FontWeight.w900,
+                fontSize: 18,
+                letterSpacing: -0.3,
+                color: isDark ? Colors.white : const Color(0xFF0F172A),
               ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _onlyBankFilter
-                  ? 'Khi có biến động số dư từ Vietcombank, MB, Techcombank... thông báo sẽ xuất hiện tại đây.'
-                  : 'Ứng dụng đang chạy nền và sẵn sàng nhận thông báo.\nBạn cũng có thể bấm nút bên dưới để test ngay.',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                fontSize: 13,
-                height: 1.4,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            FilledButton.icon(
-              icon: const Icon(Icons.science_rounded, size: 18),
-              label: const Text('Bấm Để Test Giả Lập'),
-              style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              ),
-              onPressed: () => SimulationSheet.show(context),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  /// Settings & Permissions Bottom Sheet
+  void _showSettingsSheet(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (sheetCtx) => Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 580),
+          child: Container(
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF0F172A) : Colors.white,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.25),
+                  blurRadius: 30,
+                  offset: const Offset(0, -10),
+                ),
+              ],
+            ),
+            padding: const EdgeInsets.all(24),
+            child: SafeArea(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Drag handle
+              Center(
+                child: Container(
+                  width: 44,
+                  height: 4.5,
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 18),
+
+              // Title
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Cài Đặt & Quyền Hệ Thống',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 19,
+                      letterSpacing: -0.4,
+                      color: isDark ? Colors.white : const Color(0xFF0F172A),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded),
+                    onPressed: () => Navigator.pop(sheetCtx),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              // Permission Card
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFE2E8F0),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          _isPermissionGranted
+                              ? Icons.verified_rounded
+                              : Icons.warning_amber_rounded,
+                          color: _isPermissionGranted
+                              ? const Color(0xFF10B981)
+                              : const Color(0xFFF59E0B),
+                          size: 22,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Quyền Đọc Thông Báo (Notification Access)',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 14,
+                              color: isDark ? Colors.white : const Color(0xFF0F172A),
+                            ),
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: _isPermissionGranted
+                                ? const Color(0xFF10B981).withValues(alpha: 0.15)
+                                : const Color(0xFFF59E0B).withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            _isPermissionGranted ? 'ĐÃ BẬT' : 'CHƯA CẤP',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w900,
+                              fontSize: 11,
+                              color: _isPermissionGranted
+                                  ? const Color(0xFF10B981)
+                                  : const Color(0xFFD97706),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Open Settings Button
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF0F172A),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 13),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                        icon: const Icon(Icons.settings_suggest_rounded, size: 18),
+                        label: const Text(
+                          'Mở Cài Đặt Hệ Thống Android',
+                          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5),
+                        ),
+                        onPressed: () {
+                          Navigator.pop(sheetCtx);
+                          NotificationBridge.instance.openSettings();
+                        },
+                      ),
+                    ),
+
+                    const SizedBox(height: 8),
+
+                    // Refresh Permission Check Button
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                        icon: const Icon(Icons.refresh_rounded, size: 18),
+                        label: const Text(
+                          'Kiểm Tra Lại Trạng Thái',
+                          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                        ),
+                        onPressed: () {
+                          _checkPermission();
+                          Navigator.pop(sheetCtx);
+                        },
+                      ),
+                    ),
+
+                    const SizedBox(height: 8),
+
+                    // Unlock Restricted Settings Button (for Android 13+)
+                    SizedBox(
+                      width: double.infinity,
+                      child: TextButton.icon(
+                        style: TextButton.styleFrom(
+                          foregroundColor: const Color(0xFFD97706),
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                        ),
+                        icon: const Icon(Icons.touch_app_rounded, size: 16),
+                        label: const Text(
+                          'Xem 3 bước kích hoạt quyền (Android 13+)',
+                          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12.5),
+                        ),
+                        onPressed: () {
+                          Navigator.pop(sheetCtx);
+                          _showThreeStepPermissionPopup(context);
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // Privacy & Security Card
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF1E293B).withValues(alpha: 0.5) : const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.verified_user_rounded, size: 20, color: Color(0xFF10B981)),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Ứng dụng chỉ nhận diện thông báo biến động số dư để ghi nhận chi tiêu cá nhân. Dữ liệu xử lý an toàn nội bộ trên thiết bị.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          height: 1.4,
+                          color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF475569),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              if (_notifications.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: TextButton.icon(
+                    style: TextButton.styleFrom(
+                      foregroundColor: const Color(0xFFEF4444),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    icon: const Icon(Icons.delete_sweep_rounded, size: 20),
+                    label: const Text(
+                      'Xóa Toàn Bộ Lịch Sử Thông Báo',
+                      style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+                    ),
+                    onPressed: () {
+                      Navigator.pop(sheetCtx);
+                      _confirmClearAll();
+                    },
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    ),
+  ),
+);
+  }
+
+  /// Friendly 3-step popup to activate notification permissions
+  void _showThreeStepPermissionPopup(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) => Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 580),
+          child: Container(
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF0F172A) : Colors.white,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.28),
+                  blurRadius: 36,
+                  offset: const Offset(0, -12),
+                ),
+              ],
+            ),
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+            child: SafeArea(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 42,
+                      height: 4.5,
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF0F766E), Color(0xFF10B981)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF10B981).withValues(alpha: 0.3),
+                              blurRadius: 8,
+                              offset: const Offset(0, 3),
+                            ),
+                          ],
+                        ),
+                        child: const Icon(Icons.verified_user_rounded, color: Colors.white, size: 22),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Kích hoạt trong 3 bước',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w900,
+                                fontSize: 17.5,
+                                letterSpacing: -0.3,
+                                color: isDark ? Colors.white : const Color(0xFF0F172A),
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Thực hiện 3 bước để app hoạt động tốt nhé ✨',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded),
+                        onPressed: () => Navigator.pop(sheetCtx),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Step 1
+                  _buildFriendlyStepCard(
+                    number: '1',
+                    title: 'Bạn cần vào Thông tin ứng dụng',
+                    subtitle: 'Bấm nút màu xanh bên dưới để vào thẳng trang cài đặt của chinhan-xT.',
+                    icon: Icons.touch_app_rounded,
+                    isDark: isDark,
+                  ),
+
+                  // Step 2
+                  _buildFriendlyStepCard(
+                    number: '2',
+                    title: 'Cho phép cài đặt bị hạn chế',
+                    subtitle: 'Bấm vào biểu tượng dấu 3 chấm (⋮) ở góc trên bên phải màn hình và chọn "Cho phép cài đặt bị hạn chế".',
+                    icon: Icons.more_vert_rounded,
+                    isDark: isDark,
+                  ),
+
+                  // Step 3
+                  _buildFriendlyStepCard(
+                    number: '3',
+                    title: 'Khởi động lại app và cấp quyền ngay',
+                    subtitle: 'Mở lại app chinhan-xT và gạt bật quyền thông báo để app bắt đầu ghi nhận giao dịch.',
+                    icon: Icons.check_circle_rounded,
+                    isDark: isDark,
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // Button 1: Open App Details
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFF0F766E),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        elevation: 2,
+                      ),
+                      icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                      label: const Text(
+                        'Bước 1: Mở Thông Tin Ứng Dụng Ngay',
+                        style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13.5),
+                      ),
+                      onPressed: () {
+                        Navigator.pop(sheetCtx);
+                        NotificationBridge.instance.openAppDetails();
+                      },
+                    ),
+                  ),
+
+                  const SizedBox(height: 8),
+
+                  // Button 2: Direct Open Notification Settings
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                      icon: const Icon(Icons.settings_rounded, size: 18),
+                      label: const Text(
+                        'Bước 3: Mở Màn Hình Bật Quyền Hệ Thống',
+                        style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+                      ),
+                      onPressed: () {
+                        Navigator.pop(sheetCtx);
+                        NotificationBridge.instance.openSettings();
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFriendlyStepCard({
+    required String number,
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required bool isDark,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isDark
+            ? Colors.white.withValues(alpha: 0.05)
+            : const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.08)
+              : const Color(0xFFE2E8F0),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 26,
+            height: 26,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF0F766E), Color(0xFF10B981)],
+              ),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Center(
+              child: Text(
+                number,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 13.5,
+                          color: isDark ? Colors.white : const Color(0xFF0F172A),
+                        ),
+                      ),
+                    ),
+                    Icon(icon, size: 16, color: const Color(0xFF10B981)),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    height: 1.35,
+                    color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

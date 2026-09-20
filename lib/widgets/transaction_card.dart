@@ -5,9 +5,9 @@ import 'package:intl/intl.dart';
 import '../models/parsed_transaction.dart';
 import '../models/raw_notification.dart';
 
-/// Card widget to display a single notification item in the monitor list.
-/// Highlights financial transactions (Credit vs Debit) and allows tapping to
-/// inspect raw & parsed JSON payloads with one-click copy.
+/// Ultra-premium 2.5D card representing a single notification or bank transaction.
+/// Features SVG-style gradient brand badges with colored drop-shadow,
+/// high-contrast bold typography, and smooth squircle corners.
 class TransactionCard extends StatelessWidget {
   final RawNotification notification;
   final ParsedTransaction? parsedTransaction;
@@ -20,453 +20,678 @@ class TransactionCard extends StatelessWidget {
     this.onTap,
   });
 
+  bool get isBank => parsedTransaction != null;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final isBank = parsedTransaction != null;
 
     final dateFormatted = DateFormat('HH:mm:ss • dd/MM/yyyy').format(
       DateTime.fromMillisecondsSinceEpoch(notification.timestamp),
     );
 
-    return Card(
-      elevation: isBank ? 2 : 0.5,
-      margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(
+    // Card background subtle gradient
+    final List<Color> cardGradient = isBank
+        ? (parsedTransaction!.isCredit
+            ? (isDark
+                ? const [Color(0xFF13231B), Color(0xFF0E1A14)]
+                : const [Color(0xFFFFFFFF), Color(0xFFF2FBF6)])
+            : (isDark
+                ? const [Color(0xFF261517), Color(0xFF1C0F11)]
+                : const [Color(0xFFFFFFFF), Color(0xFFFFF6F5)]))
+        : (isDark
+            ? const [Color(0xFF1E2430), Color(0xFF161A24)]
+            : const [Color(0xFFFFFFFF), Color(0xFFF9FAFB)]);
+
+    // 2.5D Soft layered elevation shadow
+    final List<BoxShadow> cardShadow = [
+      BoxShadow(
+        color: isDark
+            ? Colors.black.withValues(alpha: 0.4)
+            : const Color(0x0D0F172A),
+        blurRadius: 20,
+        offset: const Offset(0, 8),
+        spreadRadius: 0,
+      ),
+      BoxShadow(
+        color: isDark
+            ? Colors.black.withValues(alpha: 0.2)
+            : const Color(0x060F172A),
+        blurRadius: 6,
+        offset: const Offset(0, 2),
+      ),
+    ];
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: cardGradient,
+        ),
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: cardShadow,
+        border: Border.all(
           color: isBank
               ? (parsedTransaction!.isCredit
-                  ? Colors.green.withValues(alpha: 0.5)
-                  : Colors.deepOrange.withValues(alpha: 0.5))
-              : theme.colorScheme.outlineVariant.withValues(alpha: 0.4),
-          width: isBank ? 1.5 : 1,
+                  ? const Color(0xFF10B981).withValues(alpha: isDark ? 0.35 : 0.25)
+                  : const Color(0xFFF43F5E).withValues(alpha: isDark ? 0.35 : 0.25))
+              : (isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.04)),
+          width: 1.2,
         ),
       ),
-      color: isBank
-          ? (isDark
-              ? (parsedTransaction!.isCredit
-                  ? const Color(0xFF0F2618)
-                  : const Color(0xFF2B1410))
-              : (parsedTransaction!.isCredit
-                  ? const Color(0xFFF0FDF4)
-                  : const Color(0xFFFFF7ED)))
-          : (isDark ? const Color(0xFF1E1E24) : Colors.white),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: onTap ?? () => _showDetailDialog(context),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header: App icon, Title / Package, Time
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  _buildAppIcon(context),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Flexible(
-                              child: Text(
-                                _getHeaderTitle(),
-                                style: theme.textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 15,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            if (isBank) ...[
-                              const SizedBox(width: 6),
-                              _buildBankBadge(context),
-                            ],
-                          ],
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          '$dateFormatted  •  ${_getShortPackage(notification.packageName)}',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.textTheme.bodySmall?.color
-                                ?.withValues(alpha: 0.7),
-                            fontSize: 11,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ),
-                  ),
-                  Icon(
-                    Icons.chevron_right_rounded,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
-                    size: 20,
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 10),
-
-              // Highlight section for parsed financial transactions
-              if (isBank) ...[
-                _buildFinancialHighlight(context),
-                const SizedBox(height: 10),
-              ],
-
-              // Body: Raw notification text
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? Colors.black.withValues(alpha: 0.25)
-                      : Colors.black.withValues(alpha: 0.03),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(24),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(24),
+          onTap: onTap ?? () => _showDetailSheet(context),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Top Row: Brand Icon, Title & Account, Amount Badge
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    if (notification.subText != null &&
-                        notification.subText!.trim().isNotEmpty) ...[
-                      Text(
-                        notification.subText!.trim(),
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: theme.colorScheme.primary,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                    ],
-                    Text(
-                      notification.text.isNotEmpty
-                          ? notification.text
-                          : '(Không có nội dung văn bản)',
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        fontSize: 13,
-                        height: 1.35,
+                    // SVG-style 2.5D Brand Icon Badge
+                    _buildBrandBadge(context),
+                    const SizedBox(width: 12),
+
+                    // Title and Metadata
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _getDisplayTitle(),
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 16,
+                              color: isDark ? Colors.white : const Color(0xFF0F172A),
+                              letterSpacing: -0.2,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 3),
+                          Row(
+                            children: [
+                              if (isBank && parsedTransaction!.accountNumber != null) ...[
+                                Text(
+                                  'TK ${parsedTransaction!.accountNumber}',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 12,
+                                    color: isDark
+                                        ? const Color(0xFF94A3B8)
+                                        : const Color(0xFF64748B),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  '•',
+                                  style: TextStyle(
+                                    color: isDark
+                                        ? const Color(0xFF64748B)
+                                        : const Color(0xFF94A3B8),
+                                    fontSize: 10,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                              ],
+                              Expanded(
+                                child: Text(
+                                  dateFormatted,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w500,
+                                    fontSize: 11.5,
+                                    color: isDark
+                                        ? const Color(0xFF94A3B8)
+                                        : const Color(0xFF64748B),
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
                     ),
+
+                    // Amount Badge (if parsed financial transaction)
+                    if (isBank) ...[
+                      const SizedBox(width: 8),
+                      _buildAmountPill(context),
+                    ],
                   ],
                 ),
-              ),
-            ],
+
+                // Content / Note Section
+                const SizedBox(height: 12),
+                _buildBodyContent(context),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  String _getHeaderTitle() {
+  /// 2.5D SVG-style Icon badge with colored drop-shadow
+  Widget _buildBrandBadge(BuildContext context) {
+    final style = _getBankStyle();
+
+    return Container(
+      width: 46,
+      height: 46,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: style.gradient,
+        ),
+        borderRadius: BorderRadius.circular(15),
+        boxShadow: [
+          BoxShadow(
+            color: style.shadowColor.withValues(alpha: 0.38),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Center(
+        child: style.monogram != null
+            ? Text(
+                style.monogram!,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 13,
+                  letterSpacing: -0.3,
+                ),
+              )
+            : Icon(
+                style.iconData,
+                color: Colors.white,
+                size: 22,
+              ),
+      ),
+    );
+  }
+
+  /// Amount Pill with 2.5D subtle elevation
+  Widget _buildAmountPill(BuildContext context) {
+    final isCredit = parsedTransaction!.isCredit;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    final Color textColor = isCredit
+        ? (isDark ? const Color(0xFF34D399) : const Color(0xFF047857))
+        : (isDark ? const Color(0xFFFB7185) : const Color(0xFFBE123C));
+
+    final Color bgColor = isCredit
+        ? (isDark ? const Color(0xFF064E3B).withValues(alpha: 0.5) : const Color(0xFFD1FAE5))
+        : (isDark ? const Color(0xFF881337).withValues(alpha: 0.5) : const Color(0xFFFFE4E6));
+
+    final Color borderColor = isCredit
+        ? const Color(0xFF10B981).withValues(alpha: 0.3)
+        : const Color(0xFFF43F5E).withValues(alpha: 0.3);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: borderColor, width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: (isCredit ? const Color(0xFF10B981) : const Color(0xFFF43F5E))
+                .withValues(alpha: 0.12),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Text(
+        parsedTransaction!.formattedAmount,
+        style: TextStyle(
+          fontWeight: FontWeight.w900,
+          fontSize: 14,
+          color: textColor,
+          letterSpacing: -0.2,
+        ),
+      ),
+    );
+  }
+
+  /// Body content showing note/narration or notification message
+  Widget _buildBodyContent(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    if (isBank) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.04)
+              : Colors.black.withValues(alpha: 0.025),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.05)
+                : Colors.black.withValues(alpha: 0.03),
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Note / Narration
+            if (parsedTransaction!.note.isNotEmpty) ...[
+              Text(
+                parsedTransaction!.note,
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13.5,
+                  color: isDark ? const Color(0xFFE2E8F0) : const Color(0xFF1E293B),
+                  height: 1.35,
+                ),
+              ),
+              const SizedBox(height: 6),
+            ],
+
+            // Category tag and Balance
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                // Category Chip
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? const Color(0xFF334155).withValues(alpha: 0.6)
+                        : const Color(0xFFE2E8F0),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    parsedTransaction!.category,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 11,
+                      color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF475569),
+                    ),
+                  ),
+                ),
+
+                // Balance if present
+                if (parsedTransaction!.balance != null)
+                  Text(
+                    'Số dư: ${NumberFormat.currency(locale: 'vi_VN', symbol: 'đ').format(parsedTransaction!.balance)}',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 11.5,
+                      color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Non-bank raw notification body
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.white.withValues(alpha: 0.03) : const Color(0xFFF1F5F9),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (notification.subText != null && notification.subText!.trim().isNotEmpty) ...[
+            Text(
+              notification.subText!.trim(),
+              style: TextStyle(
+                color: theme.colorScheme.primary,
+                fontWeight: FontWeight.w700,
+                fontSize: 11.5,
+              ),
+            ),
+            const SizedBox(height: 2),
+          ],
+          Text(
+            notification.text.isNotEmpty ? notification.text : '(Không có nội dung)',
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 13,
+              color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF334155),
+              height: 1.35,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _getDisplayTitle() {
     if (parsedTransaction != null && parsedTransaction!.title.isNotEmpty) {
       return parsedTransaction!.title;
     }
     if (notification.title.isNotEmpty) {
       return notification.title;
     }
-    return notification.packageName;
+    return notification.packageName.split('.').last;
   }
 
-  String _getShortPackage(String pkg) {
-    if (pkg.isEmpty) return 'Unknown';
-    final parts = pkg.split('.');
-    if (parts.length >= 2) {
-      return parts.sublist(parts.length - 2).join('.');
+  _BankStyle _getBankStyle() {
+    final title = _getDisplayTitle().toLowerCase();
+    final pkg = notification.packageName.toLowerCase();
+
+    if (title.contains('vietcombank') || title.contains('vcb') || pkg.contains('vcb')) {
+      return const _BankStyle(
+        gradient: [Color(0xFF10B981), Color(0xFF047857)],
+        shadowColor: Color(0xFF10B981),
+        monogram: 'VCB',
+      );
     }
-    return pkg;
-  }
-
-  Widget _buildAppIcon(BuildContext context) {
-    final titleLower = (parsedTransaction?.title ?? notification.title).toLowerCase();
-    final pkgLower = notification.packageName.toLowerCase();
-
-    IconData icon = Icons.notifications_active_outlined;
-    Color iconColor = Colors.grey;
-    Color bgColor = Colors.grey.withValues(alpha: 0.15);
-
-    if (titleLower.contains('vietcombank') || pkgLower.contains('vcb')) {
-      icon = Icons.account_balance_rounded;
-      iconColor = const Color(0xFF006633);
-      bgColor = const Color(0xFFE8F5E9);
-    } else if (titleLower.contains('mb') || pkgLower.contains('mbmobile')) {
-      icon = Icons.account_balance_rounded;
-      iconColor = const Color(0xFF002B7F);
-      bgColor = const Color(0xFFE3F2FD);
-    } else if (titleLower.contains('techcombank') || pkgLower.contains('techcombank')) {
-      icon = Icons.account_balance_rounded;
-      iconColor = const Color(0xFFE51A24);
-      bgColor = const Color(0xFFFFEBEE);
-    } else if (titleLower.contains('vpbank') || pkgLower.contains('vpbank')) {
-      icon = Icons.account_balance_rounded;
-      iconColor = const Color(0xFF00965E);
-      bgColor = const Color(0xFFE8F5E9);
-    } else if (titleLower.contains('acb') || pkgLower.contains('acb')) {
-      icon = Icons.account_balance_rounded;
-      iconColor = const Color(0xFF005696);
-      bgColor = const Color(0xFFE1F5FE);
-    } else if (titleLower.contains('tpbank') || pkgLower.contains('tpb')) {
-      icon = Icons.account_balance_rounded;
-      iconColor = const Color(0xFF7B1FA2);
-      bgColor = const Color(0xFFF3E5F5);
-    } else if (titleLower.contains('bidv') || pkgLower.contains('bidv')) {
-      icon = Icons.account_balance_rounded;
-      iconColor = const Color(0xFF007236);
-      bgColor = const Color(0xFFE8F5E9);
-    } else if (titleLower.contains('momo') || pkgLower.contains('momotransfer')) {
-      icon = Icons.account_balance_wallet_rounded;
-      iconColor = const Color(0xFFA50064);
-      bgColor = const Color(0xFFFCE4EC);
-    } else if (titleLower.contains('zalopay') || pkgLower.contains('zalopay')) {
-      icon = Icons.wallet_rounded;
-      iconColor = const Color(0xFF0068FF);
-      bgColor = const Color(0xFFE3F2FD);
-    } else if (parsedTransaction != null) {
-      icon = Icons.account_balance_rounded;
-      iconColor = Colors.teal;
-      bgColor = Colors.teal.withValues(alpha: 0.15);
+    if (title.contains('mb') || pkg.contains('mbmobile')) {
+      return const _BankStyle(
+        gradient: [Color(0xFF3B82F6), Color(0xFF1D4ED8)],
+        shadowColor: Color(0xFF3B82F6),
+        monogram: 'MB',
+      );
+    }
+    if (title.contains('techcombank') || title.contains('tcb') || pkg.contains('techcombank')) {
+      return const _BankStyle(
+        gradient: [Color(0xFFEF4444), Color(0xFFB91C1C)],
+        shadowColor: Color(0xFFEF4444),
+        monogram: 'TCB',
+      );
+    }
+    if (title.contains('vpbank') || pkg.contains('vpbank')) {
+      return const _BankStyle(
+        gradient: [Color(0xFF10B981), Color(0xFF059669)],
+        shadowColor: Color(0xFF10B981),
+        monogram: 'VPB',
+      );
+    }
+    if (title.contains('acb') || pkg.contains('acb')) {
+      return const _BankStyle(
+        gradient: [Color(0xFF0284C7), Color(0xFF0369A1)],
+        shadowColor: Color(0xFF0284C7),
+        monogram: 'ACB',
+      );
+    }
+    if (title.contains('tpbank') || pkg.contains('tpb')) {
+      return const _BankStyle(
+        gradient: [Color(0xFF8B5CF6), Color(0xFF6D28D9)],
+        shadowColor: Color(0xFF8B5CF6),
+        monogram: 'TPB',
+      );
+    }
+    if (title.contains('bidv') || pkg.contains('bidv')) {
+      return const _BankStyle(
+        gradient: [Color(0xFF0D9488), Color(0xFF0F766E)],
+        shadowColor: Color(0xFF0D9488),
+        monogram: 'BIDV',
+      );
+    }
+    if (title.contains('momo') || pkg.contains('momotransfer')) {
+      return const _BankStyle(
+        gradient: [Color(0xFFEC4899), Color(0xFFBE185D)],
+        shadowColor: Color(0xFFEC4899),
+        monogram: 'MoMo',
+      );
+    }
+    if (title.contains('zalopay') || pkg.contains('zalopay')) {
+      return const _BankStyle(
+        gradient: [Color(0xFF0068FF), Color(0xFF0049B7)],
+        shadowColor: Color(0xFF0068FF),
+        monogram: 'Zalo',
+      );
     }
 
-    return Container(
-      width: 40,
-      height: 40,
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Icon(icon, color: iconColor, size: 22),
+    if (isBank) {
+      return const _BankStyle(
+        gradient: [Color(0xFF6366F1), Color(0xFF4338CA)],
+        shadowColor: Color(0xFF6366F1),
+        iconData: Icons.account_balance_rounded,
+      );
+    }
+
+    // Default other app
+    return const _BankStyle(
+      gradient: [Color(0xFF64748B), Color(0xFF334155)],
+      shadowColor: Color(0xFF64748B),
+      iconData: Icons.notifications_active_rounded,
     );
   }
 
-  Widget _buildBankBadge(BuildContext context) {
-    final isCredit = parsedTransaction!.isCredit;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-      decoration: BoxDecoration(
-        color: isCredit
-            ? Colors.green.withValues(alpha: 0.18)
-            : Colors.deepOrange.withValues(alpha: 0.18),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(
-        isCredit ? 'THU NHẬP' : 'CHI TIÊU',
-        style: TextStyle(
-          color: isCredit ? Colors.green.shade800 : Colors.deepOrange.shade800,
-          fontSize: 10,
-          fontWeight: FontWeight.w800,
-          letterSpacing: 0.5,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFinancialHighlight(BuildContext context) {
-    final tx = parsedTransaction!;
+  /// Detail BottomSheet with 1-click JSON copy
+  void _showDetailSheet(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    final currencyFormatter =
-        NumberFormat.currency(locale: 'vi_VN', symbol: 'đ');
+    final parsedJson = parsedTransaction != null
+        ? const JsonEncoder.withIndent('  ').convert(parsedTransaction!.toMap())
+        : null;
+    final rawJson =
+        const JsonEncoder.withIndent('  ').convert(notification.toMap());
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: isDark
-            ? (tx.isCredit
-                ? const Color(0xFF143320)
-                : const Color(0xFF381A15))
-            : (tx.isCredit
-                ? const Color(0xFFE8F5E9)
-                : const Color(0xFFFFECE0)),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: tx.isCredit
-              ? Colors.green.withValues(alpha: 0.3)
-              : Colors.deepOrange.withValues(alpha: 0.3),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Row: Amount + Confidence badge
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                tx.formattedAmount,
-                style: TextStyle(
-                  color: tx.isCredit
-                      ? (isDark ? const Color(0xFF4ADE80) : const Color(0xFF15803D))
-                      : (isDark ? const Color(0xFFFB7185) : const Color(0xFFDC2626)),
-                  fontSize: 20,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 0.2,
-                ),
-              ),
-              if (tx.confidence < 1.0)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: Colors.amber.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    'Độ tin cậy: ${(tx.confidence * 100).toInt()}%',
-                    style: const TextStyle(
-                      color: Colors.amber,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-            ],
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) => Center(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: 580,
+            maxHeight: MediaQuery.of(context).size.height * 0.85,
           ),
-
-          const SizedBox(height: 8),
-
-          // Chips: Category, Account, Balance
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              _buildInfoChip(
-                context,
-                icon: Icons.label_outline_rounded,
-                label: tx.category,
-                color: Colors.indigo,
-              ),
-              if (tx.accountNumber != null && tx.accountNumber!.isNotEmpty)
-                _buildInfoChip(
-                  context,
-                  icon: Icons.credit_card_rounded,
-                  label: 'TK: ${tx.accountNumber}',
-                  color: Colors.blueGrey,
-                ),
-              if (tx.balance != null)
-                _buildInfoChip(
-                  context,
-                  icon: Icons.account_balance_wallet_outlined,
-                  label: 'Dư: ${currencyFormatter.format(tx.balance).trim()}',
-                  color: Colors.teal,
-                ),
-            ],
-          ),
-
-          if (tx.note.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(
-                  Icons.notes_rounded,
-                  size: 14,
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                ),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: Text(
-                    tx.note,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontStyle: FontStyle.italic,
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+          child: Container(
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF0F172A) : Colors.white,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.2),
+                  blurRadius: 30,
+                  offset: const Offset(0, -10),
                 ),
               ],
             ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInfoChip(
-    BuildContext context, {
-    required IconData icon,
-    required String label,
-    required MaterialColor color,
-  }) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: isDark ? color.shade900.withValues(alpha: 0.4) : color.shade50,
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(
-          color: isDark ? color.shade700.withValues(alpha: 0.5) : color.shade200,
-          width: 0.8,
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            icon,
-            size: 12,
-            color: isDark ? color.shade200 : color.shade800,
-          ),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: isDark ? color.shade100 : color.shade900,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showDetailDialog(BuildContext context) {
-    showDialog<void>(
-      context: context,
-      builder: (dialogContext) {
-        final parsedJson = parsedTransaction != null
-            ? const JsonEncoder.withIndent('  ').convert(parsedTransaction!.toMap())
-            : null;
-        final rawJson =
-            const JsonEncoder.withIndent('  ').convert(notification.toMap());
-
-        return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          title: Row(
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              _buildAppIcon(dialogContext),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+              // Drag handle
+              Center(
+                child: Container(
+                  margin: const EdgeInsets.only(top: 12, bottom: 8),
+                  width: 44,
+                  height: 4.5,
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                ),
+              ),
+
+              // Sheet Header
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                child: Row(
                   children: [
-                    Text(
-                      _getHeaderTitle(),
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
+                    _buildBrandBadge(context),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _getDisplayTitle(),
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 18,
+                              color: isDark ? Colors.white : const Color(0xFF0F172A),
+                            ),
+                          ),
+                          Text(
+                            isBank
+                                ? 'Đã bóc tách giao dịch chuẩn'
+                                : 'Thông báo hệ thống',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 12,
+                              color: isBank
+                                  ? const Color(0xFF10B981)
+                                  : (isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B)),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    Text(
-                      notification.packageName,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: Theme.of(dialogContext)
-                            .colorScheme
-                            .onSurface
-                            .withValues(alpha: 0.6),
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded),
+                      onPressed: () => Navigator.pop(sheetCtx),
+                    ),
+                  ],
+                ),
+              ),
+
+              const Divider(height: 1),
+
+              // Content Area
+              Flexible(
+                child: ListView(
+                  padding: const EdgeInsets.all(20),
+                  children: [
+                    if (parsedJson != null) ...[
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Expanded(
+                            child: Text(
+                              'Parsed Transaction (Schema App)',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
+                          TextButton.icon(
+                            style: TextButton.styleFrom(
+                              foregroundColor: const Color(0xFF10B981),
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            ),
+                            icon: const Icon(Icons.copy_rounded, size: 16),
+                            label: const Text(
+                              'Sao chép JSON',
+                              style: TextStyle(fontWeight: FontWeight.w700),
+                            ),
+                            onPressed: () {
+                              Clipboard.setData(ClipboardData(text: parsedJson));
+                              Navigator.pop(sheetCtx);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('✓ Đã sao chép Parsed Transaction JSON'),
+                                  behavior: SnackBarBehavior.floating,
+                                  duration: Duration(seconds: 2),
+                                ),
+                              );
+                            },
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: isDark ? const Color(0xFF020617) : const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
+                          ),
+                        ),
+                        child: SelectableText(
+                          parsedJson,
+                          style: const TextStyle(
+                            fontFamily: 'monospace',
+                            fontSize: 11.5,
+                            height: 1.4,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                    ],
+
+                    // Raw Payload
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            'Raw Android Notification Payload',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
+                        TextButton.icon(
+                          style: TextButton.styleFrom(
+                            foregroundColor: theme.colorScheme.primary,
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          ),
+                          icon: const Icon(Icons.copy_rounded, size: 16),
+                          label: const Text(
+                            'Sao chép',
+                            style: TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                          onPressed: () {
+                            Clipboard.setData(ClipboardData(text: rawJson));
+                            Navigator.pop(sheetCtx);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('✓ Đã sao chép Raw Notification JSON'),
+                                behavior: SnackBarBehavior.floating,
+                                duration: Duration(seconds: 2),
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF020617) : const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
+                        ),
+                      ),
+                      child: SelectableText(
+                        rawJson,
+                        style: const TextStyle(
+                          fontFamily: 'monospace',
+                          fontSize: 11.5,
+                          height: 1.4,
+                        ),
                       ),
                     ),
                   ],
@@ -474,179 +699,24 @@ class TransactionCard extends StatelessWidget {
               ),
             ],
           ),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: DefaultTabController(
-              length: parsedJson != null ? 2 : 1,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (parsedJson != null)
-                    const TabBar(
-                      labelColor: Colors.blueAccent,
-                      indicatorColor: Colors.blueAccent,
-                      tabs: [
-                        Tab(text: 'Parsed Transaction'),
-                        Tab(text: 'Raw Notification'),
-                      ],
-                    ),
-                  const SizedBox(height: 8),
-                  Flexible(
-                    child: SizedBox(
-                      height: 320,
-                      child: parsedJson != null
-                          ? TabBarView(
-                              children: [
-                                _buildJsonView(
-                                  dialogContext,
-                                  title: 'Schema App_Quan_ly_chi_tieu_ca_nhan',
-                                  jsonString: parsedJson,
-                                ),
-                                _buildJsonView(
-                                  dialogContext,
-                                  title: 'Android Notification Payload',
-                                  jsonString: rawJson,
-                                ),
-                              ],
-                            )
-                          : _buildJsonView(
-                              dialogContext,
-                              title: 'Android Notification Payload',
-                              jsonString: rawJson,
-                            ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            if (parsedJson != null)
-              OutlinedButton.icon(
-                icon: const Icon(Icons.copy_rounded, size: 16),
-                label: const Text('Sao chép Parsed JSON'),
-                onPressed: () {
-                  Clipboard.setData(ClipboardData(text: parsedJson));
-                  Navigator.pop(dialogContext);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Đã sao chép Parsed JSON vào bộ nhớ tạm!'),
-                      behavior: SnackBarBehavior.floating,
-                      duration: Duration(seconds: 2),
-                    ),
-                  );
-                },
-              ),
-            FilledButton.icon(
-              icon: const Icon(Icons.copy_all_rounded, size: 16),
-              label: const Text('Sao chép Tất cả'),
-              onPressed: () {
-                final allData = {
-                  'rawNotification': notification.toMap(),
-                  if (parsedTransaction != null)
-                    'parsedTransaction': parsedTransaction!.toMap(),
-                };
-                Clipboard.setData(ClipboardData(
-                  text: const JsonEncoder.withIndent('  ').convert(allData),
-                ));
-                Navigator.pop(dialogContext);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Đã sao chép toàn bộ dữ liệu vào bộ nhớ tạm!'),
-                    behavior: SnackBarBehavior.floating,
-                    duration: Duration(seconds: 2),
-                  ),
-                );
-              },
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Đóng'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _buildJsonView(
-    BuildContext context, {
-    required String title,
-    required String jsonString,
-  }) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
-    return Container(
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF141419) : const Color(0xFFF8F9FA),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.4),
         ),
       ),
-      padding: const EdgeInsets.all(10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                title,
-                style: theme.textTheme.labelSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: theme.colorScheme.primary,
-                ),
-              ),
-              InkWell(
-                onTap: () {
-                  Clipboard.setData(ClipboardData(text: jsonString));
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Đã sao chép $title!'),
-                      behavior: SnackBarBehavior.floating,
-                      duration: const Duration(seconds: 1),
-                    ),
-                  );
-                },
-                borderRadius: BorderRadius.circular(4),
-                child: Padding(
-                  padding: const EdgeInsets.all(4),
-                  child: Row(
-                    children: [
-                      Icon(Icons.copy, size: 12, color: theme.colorScheme.primary),
-                      const SizedBox(width: 4),
-                      Text(
-                        'Copy',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: theme.colorScheme.primary,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const Divider(height: 12),
-          Expanded(
-            child: SingleChildScrollView(
-              child: SelectableText(
-                jsonString,
-                style: const TextStyle(
-                  fontFamily: 'monospace',
-                  fontSize: 12,
-                  height: 1.4,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
+    ),
+  ),
+);
   }
+}
+
+class _BankStyle {
+  final List<Color> gradient;
+  final Color shadowColor;
+  final String? monogram;
+  final IconData iconData;
+
+  const _BankStyle({
+    required this.gradient,
+    required this.shadowColor,
+    this.monogram,
+    this.iconData = Icons.account_balance_rounded,
+  });
 }

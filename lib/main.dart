@@ -23,7 +23,7 @@ class BankNotificationApp extends StatelessWidget {
     const seedColor = Color(0xFF0F766E);
 
     return MaterialApp(
-      title: 'Bank Notification Monitor',
+      title: 'chinhan-xT',
       debugShowCheckedModeBanner: false,
       themeMode: ThemeMode.system,
       theme: ThemeData(
@@ -32,12 +32,12 @@ class BankNotificationApp extends StatelessWidget {
           seedColor: seedColor,
           brightness: Brightness.light,
         ),
-        scaffoldBackgroundColor: const Color(0xFFF8FAFC),
+        scaffoldBackgroundColor: const Color(0xFFF8F9FA),
         appBarTheme: const AppBarTheme(
           centerTitle: false,
           elevation: 0,
-          scrolledUnderElevation: 1,
-          backgroundColor: Color(0xFFF8FAFC),
+          scrolledUnderElevation: 0,
+          backgroundColor: Color(0xFFF8F9FA),
           foregroundColor: Color(0xFF0F172A),
         ),
         cardTheme: CardThemeData(

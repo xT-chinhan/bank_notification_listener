@@ -1,20 +1,28 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:bank_notification_listener/models/parsed_transaction.dart';
-import 'package:bank_notification_listener/services/mock_bank_samples.dart';
-import 'package:bank_notification_listener/widgets/simulation_sheet.dart';
-import 'package:bank_notification_listener/widgets/transaction_card.dart';
+import 'package:bank_notification_listener/models/raw_notification.dart';
 import 'package:bank_notification_listener/screens/monitor_screen.dart';
+import 'package:bank_notification_listener/widgets/transaction_card.dart';
 
 void main() {
   group('TransactionCard Widget Tests', () {
     testWidgets('renders non-bank raw notification correctly', (tester) async {
-      final notif = MockBankSamples.facebookNotification;
+      final notif = RawNotification(
+        id: 'test_1',
+        packageName: 'com.facebook.katana',
+        title: 'Facebook',
+        text: 'Nguyễn Văn B đã thích ảnh của bạn.',
+        timestamp: 1789442000000,
+        isBankNotification: false,
+      );
 
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: TransactionCard(notification: notif),
+            body: TransactionCard(
+              notification: notif,
+            ),
           ),
         ),
       );
@@ -22,22 +30,28 @@ void main() {
 
       expect(find.text('Facebook'), findsOneWidget);
       expect(find.text('Nguyễn Văn B đã thích ảnh của bạn.'), findsOneWidget);
-      expect(find.text('THU NHẬP'), findsNothing);
-      expect(find.text('CHI TIÊU'), findsNothing);
     });
 
     testWidgets('renders bank parsed credit transaction with green badge & tags',
         (tester) async {
-      final notif = MockBankSamples.vietcombankCredit;
-      const parsed = ParsedTransaction(
+      final notif = RawNotification(
+        id: 'test_2',
+        packageName: 'com.VCB',
+        title: 'Vietcombank',
+        text: 'TK 0123456789 +200,000VND...',
+        timestamp: 1789442100000,
+        isBankNotification: true,
+      );
+
+      final parsed = ParsedTransaction(
         id: 'tx_vcb_01',
         title: 'Vietcombank',
         amount: 200000,
         type: 'credit',
         timestamp: 1789442100000,
+        accountNumber: '...6789',
         category: 'Chuyển tiền',
-        note: 'Nguyen Van A chuyen tien',
-        accountNumber: '0123456789',
+        note: 'Tien thu no',
         balance: 5200000,
       );
 
@@ -54,25 +68,32 @@ void main() {
       await tester.pump();
 
       expect(find.text('Vietcombank'), findsOneWidget);
-      expect(find.text('THU NHẬP'), findsOneWidget);
-      expect(find.text('+ 200.000 đ'), findsOneWidget);
+      expect(find.textContaining('+ 200.000'), findsOneWidget);
+      expect(find.text('TK ...6789'), findsOneWidget);
+      expect(find.text('Tien thu no'), findsOneWidget);
       expect(find.text('Chuyển tiền'), findsOneWidget);
-      expect(find.text('TK: 0123456789'), findsOneWidget);
+      expect(find.textContaining('5.200.000'), findsOneWidget);
     });
 
-    testWidgets('renders bank parsed debit transaction with CHI TIEU badge',
+    testWidgets('renders bank parsed debit transaction with debit badge',
         (tester) async {
-      final notif = MockBankSamples.mbbankDebit;
-      const parsed = ParsedTransaction(
+      final notif = RawNotification(
+        id: 'test_3',
+        packageName: 'com.mbmobile',
+        title: 'MBBank',
+        text: 'TK 123 -35,000VND ND: Tra sua',
+        timestamp: 1789442200000,
+        isBankNotification: true,
+      );
+
+      final parsed = ParsedTransaction(
         id: 'tx_mb_01',
         title: 'MBBank',
         amount: 35000,
         type: 'debit',
-        timestamp: 1789456815000,
+        timestamp: 1789442200000,
         category: 'Ăn uống',
         note: 'Tra sua gong cha',
-        accountNumber: '123456789999',
-        balance: 12815000,
       );
 
       await tester.pumpWidget(
@@ -88,15 +109,22 @@ void main() {
       await tester.pump();
 
       expect(find.text('MBBank'), findsOneWidget);
-      expect(find.text('CHI TIÊU'), findsOneWidget);
-      expect(find.text('- 35.000 đ'), findsOneWidget);
-      expect(find.text('Ăn uống'), findsOneWidget);
+      expect(find.textContaining('35.000'), findsOneWidget);
+      expect(find.text('Tra sua gong cha'), findsOneWidget);
     });
 
-    testWidgets('tapping TransactionCard opens detail dialog with JSON inspection',
+    testWidgets('tapping TransactionCard opens detail sheet with JSON inspection',
         (tester) async {
-      final notif = MockBankSamples.vietcombankCredit;
-      const parsed = ParsedTransaction(
+      final notif = RawNotification(
+        id: 'test_detail',
+        packageName: 'com.VCB',
+        title: 'Vietcombank',
+        text: 'TK 0123 +200,000VND',
+        timestamp: 1789442100000,
+        isBankNotification: true,
+      );
+
+      final parsed = ParsedTransaction(
         id: 'tx_vcb_01',
         title: 'Vietcombank',
         amount: 200000,
@@ -120,40 +148,20 @@ void main() {
       await tester.tap(find.byType(InkWell).first);
       await tester.pumpAndSettle();
 
-      // Dialog is open
-      expect(find.text('Parsed Transaction'), findsOneWidget);
-      expect(find.text('Raw Notification'), findsOneWidget);
-      expect(find.text('Sao chép Parsed JSON'), findsOneWidget);
-      expect(find.text('Sao chép Tất cả'), findsOneWidget);
+      // Detail sheet is open
+      expect(find.text('Parsed Transaction (Schema App)'), findsOneWidget);
+      expect(find.text('Raw Android Notification Payload'), findsOneWidget);
+      expect(find.text('Sao chép JSON'), findsOneWidget);
 
-      // Close dialog
-      await tester.tap(find.text('Đóng'));
+      // Close sheet
+      await tester.tap(find.byIcon(Icons.close_rounded));
       await tester.pumpAndSettle();
-      expect(find.text('Parsed Transaction'), findsNothing);
-    });
-  });
-
-  group('SimulationSheet Tests', () {
-    testWidgets('renders all bank samples and filter tabs', (tester) async {
-      await tester.pumpWidget(
-        const MaterialApp(
-          home: Scaffold(
-            body: SimulationSheet(),
-          ),
-        ),
-      );
-      await tester.pump();
-
-      expect(find.text('Bộ Giả Lập Thông Báo'), findsOneWidget);
-      expect(find.text('Bắn Tất Cả'), findsOneWidget);
-      expect(find.textContaining('Tất cả'), findsOneWidget);
-      expect(find.textContaining('Ngân hàng'), findsOneWidget);
-      expect(find.textContaining('Khác'), findsOneWidget);
+      expect(find.text('Parsed Transaction (Schema App)'), findsNothing);
     });
   });
 
   group('MonitorScreen UI Tests', () {
-    testWidgets('displays empty state and responds to filter toggle',
+    testWidgets('displays Bank Monitor header, empty state, and opens settings sheet',
         (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
@@ -161,18 +169,28 @@ void main() {
         ),
       );
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
+      await tester.pump(const Duration(milliseconds: 100));
 
-      expect(find.text('Bank Notification Monitor'), findsOneWidget);
-      expect(find.textContaining('Tất cả thông báo'), findsOneWidget);
-      expect(find.textContaining('Chỉ ngân hàng'), findsOneWidget);
-      expect(find.text('Test Giả Lập Ngân Hàng'), findsOneWidget);
-      expect(find.text('Bấm Để Test Giả Lập'), findsOneWidget);
+      expect(find.text('chinhan-xT'), findsOneWidget);
+      expect(find.text('Quản lý chi tiêu cá nhân'), findsOneWidget);
+      expect(find.text('Đang chờ thông báo mới...'), findsOneWidget);
 
-      // Toggle filter chip
-      await tester.tap(find.textContaining('Chỉ ngân hàng'));
+      // Tap Settings Button
+      await tester.tap(find.byIcon(Icons.tune_rounded));
       await tester.pump();
-      expect(find.text('Chưa có thông báo ngân hàng nào'), findsOneWidget);
+      await tester.pump(const Duration(milliseconds: 400));
+
+      // Settings Sheet is open
+      expect(find.text('Cài Đặt & Quyền Hệ Thống'), findsOneWidget);
+      expect(find.textContaining('Quyền Đọc Thông Báo'), findsOneWidget);
+      expect(find.text('Mở Cài Đặt Hệ Thống Android'), findsOneWidget);
+      expect(find.text('Kiểm Tra Lại Trạng Thái'), findsOneWidget);
+
+      // Close Settings Sheet
+      await tester.tap(find.byIcon(Icons.close_rounded));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.text('Cài Đặt & Quyền Hệ Thống'), findsNothing);
     });
   });
 }

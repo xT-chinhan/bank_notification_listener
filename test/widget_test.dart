@@ -9,7 +9,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
 
     // Verify that AppBar title and key UI elements appear
-    expect(find.text('Bank Notification Monitor'), findsOneWidget);
-    expect(find.text('Test Giả Lập Ngân Hàng'), findsOneWidget);
+    expect(find.text('chinhan-xT'), findsOneWidget);
+    expect(find.text('Quản lý chi tiêu cá nhân'), findsOneWidget);
   });
 }
