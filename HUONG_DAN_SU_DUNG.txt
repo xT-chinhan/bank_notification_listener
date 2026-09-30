@@ -1,0 +1,30 @@
+================================================================================
+HƯỚNG DẪN SỬ DỤNG BỘ SLIDE THUYẾT TRÌNH & TÀI LIỆU KỸ THUẬT
+Đề tài: Notification Listener (Lập trình thiết bị di động)
+Nhóm: Ngọng L/N
+Thành viên: Nguyễn Chí Nhân, Bùi Nguyễn Công Nghiệp, Võ Thành Nhân, Lưu Văn Lương
+GitHub Repo: https://github.com/xT-chinhan/bank_notification_listener
+================================================================================
+
+1. CÁCH TRÌNH CHIẾU SLIDE (presentation.html):
+- Mở file "presentation.html" bằng bất kỳ trình duyệt web nào (Chrome, Edge, Safari, Firefox).
+- Bộ slide hoạt động 100% OFFLINE, không cần internet hay máy chủ cục bộ.
+- Nhấn phím 'F' hoặc nút "⛶ Trình Chiếu" ở góc dưới bên phải để bật chế độ Toàn màn hình.
+- Phím điều khiển slide:
+  + Mũi tên Phải (→) / Space / PageDown: Chuyển sang slide tiếp theo.
+  + Mũi tên Trái (←) / PageUp: Quay lại slide trước.
+  + Phím Home: Về slide đầu tiên (Slide 1).
+  + Phím End: Đến slide cuối cùng (Slide 8).
+  + Trên màn hình cảm ứng: Vuốt trái / vuốt phải để chuyển slide.
+
+2. CÁC TÍNH NĂNG ĐẶC BIỆT CỦA BỘ SLIDE:
+- Hiệu ứng vệt sáng chiếu ngang qua ảnh và tiêu đề mỗi 7 giây (7s periodic sweep).
+- Nền động chuyển động dạng quả cầu Gradient Mesh mềm mại (Apple Keynote style).
+- Hiệu ứng chuyển slide 3D Perspective có chiều sâu và làm nét chuyển động.
+- Thanh tiến trình (Progress Bar) và bộ đếm slide tự động (SLIDE X / 8).
+
+3. TÀI LIỆU HƯỚNG DẪN TÍCH HỢP (Huong_Dan_Tich_Hop_Notification_Listener.pdf):
+- File PDF 2 trang chuẩn khổ A4, sẵn sàng nộp báo cáo hoặc in ấn phát tay.
+- Tóm tắt chi tiết 3 tầng kiến trúc, cấu hình AndroidManifest, mã nguồn Kotlin Service,
+  cầu nối Flutter Platform Channels và quy trình bypass Restricted Settings trên Android 13+.
+================================================================================

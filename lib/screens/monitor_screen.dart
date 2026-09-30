@@ -21,6 +21,7 @@ class _MonitorScreenState extends State<MonitorScreen>
     with WidgetsBindingObserver {
   bool _isPermissionGranted = false;
   bool _isCheckingPermission = true;
+  bool _isIgnoringBattery = true;
 
   final List<RawNotification> _notifications = [];
   final Map<String, ParsedTransaction?> _parsedCache = {};
@@ -34,6 +35,8 @@ class _MonitorScreenState extends State<MonitorScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _checkPermission(promptIfDenied: true);
+    _checkBatteryOptimization();
+    _loadSavedNotifications();
     _subscribeToStream();
   }
 
@@ -48,6 +51,41 @@ class _MonitorScreenState extends State<MonitorScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _checkPermission();
+      _checkBatteryOptimization();
+      _loadSavedNotifications();
+    }
+  }
+
+  Future<void> _checkBatteryOptimization() async {
+    try {
+      final ignoring =
+          await NotificationBridge.instance.isIgnoringBatteryOptimizations();
+      if (mounted) {
+        setState(() => _isIgnoringBattery = ignoring);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _loadSavedNotifications() async {
+    try {
+      final saved = await NotificationBridge.instance.getSavedNotifications();
+      if (!mounted || saved.isEmpty) return;
+      setState(() {
+        for (final item in saved) {
+          final isDup = _notifications.any((n) =>
+              n.packageName == item.packageName &&
+              n.title.trim() == item.title.trim() &&
+              n.text.trim() == item.text.trim() &&
+              (n.timestamp - item.timestamp).abs() < 2000);
+          if (!isDup) {
+            _notifications.add(item);
+            _parsedCache[item.id] = BankNotificationParser.parse(item);
+          }
+        }
+        _notifications.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      });
+    } catch (e) {
+      debugPrint('Error loading saved notifications: $e');
     }
   }
 
@@ -138,6 +176,7 @@ class _MonitorScreenState extends State<MonitorScreen>
             ),
             onPressed: () {
               Navigator.pop(dialogCtx);
+              NotificationBridge.instance.clearSavedNotifications();
               setState(() {
                 _notifications.clear();
                 _parsedCache.clear();
@@ -361,7 +400,7 @@ class _MonitorScreenState extends State<MonitorScreen>
     if (_isPermissionGranted) {
       return Container(
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
@@ -400,18 +439,65 @@ class _MonitorScreenState extends State<MonitorScreen>
                 ],
               ),
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 8),
             Expanded(
               child: Text(
-                'Đang hoạt động',
+                'Chạy ngầm 24/7 (Đang hoạt động)',
                 style: TextStyle(
                   fontWeight: FontWeight.w900,
-                  fontSize: 13.5,
+                  fontSize: 13,
                   letterSpacing: -0.1,
                   color: isDark ? const Color(0xFF6EE7B7) : const Color(0xFF047857),
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (!_isIgnoringBattery) ...[
+              InkWell(
+                onTap: () => _showBackgroundGuideSheet(context),
+                borderRadius: BorderRadius.circular(10),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? const Color(0xFFF59E0B).withValues(alpha: 0.25)
+                        : const Color(0xFFFEF3C7),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: const Color(0xFFF59E0B).withValues(alpha: 0.5),
+                      width: 0.8,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.bolt_rounded, size: 13, color: Color(0xFFD97706)),
+                      const SizedBox(width: 2),
+                      Text(
+                        'Tối ưu pin',
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w800,
+                          color: isDark ? const Color(0xFFFBBF24) : const Color(0xFFB45309),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+            ],
+            InkWell(
+              onTap: () => _showBackgroundGuideSheet(context),
+              borderRadius: BorderRadius.circular(16),
+              child: Padding(
+                padding: const EdgeInsets.all(4),
+                child: Icon(
+                  Icons.health_and_safety_outlined,
+                  size: 19,
+                  color: isDark ? const Color(0xFF6EE7B7) : const Color(0xFF047857),
+                ),
               ),
             ),
           ],
@@ -1073,4 +1159,314 @@ class _MonitorScreenState extends State<MonitorScreen>
       ),
     );
   }
+
+  void _showBackgroundGuideSheet(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Container(
+            constraints: const BoxConstraints(maxHeight: 640),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF0F172A) : Colors.white,
+              borderRadius: BorderRadius.circular(28),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.25),
+                  blurRadius: 30,
+                  offset: const Offset(0, 10),
+                ),
+              ],
+            ),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 22),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 44,
+                      height: 5,
+                      decoration: BoxDecoration(
+                        color: isDark ? Colors.white24 : Colors.black12,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF0F766E), Color(0xFF10B981)],
+                          ),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: const Icon(
+                          Icons.verified_user_rounded,
+                          color: Colors.white,
+                          size: 22,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Cấu Hình Chạy Ngầm 24/7',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w900,
+                                fontSize: 18,
+                                letterSpacing: -0.3,
+                                color: isDark ? Colors.white : const Color(0xFF0F172A),
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Đảm bảo ứng dụng bắt thông báo ngay cả khi tắt app',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 18),
+
+                  // Item 1: Foreground Service
+                  _buildGuideActionCard(
+                    isDark: isDark,
+                    title: 'Dịch vụ Chạy Ngầm (Foreground Service)',
+                    desc: 'Dịch vụ đang ghim thông báo trên khay trạng thái để Android không kill ứng dụng.',
+                    icon: Icons.shield_rounded,
+                    statusText: 'Đang hoạt động',
+                    isOk: true,
+                    btnText: 'Khởi động lại',
+                    onAction: () async {
+                      await NotificationBridge.instance.startForegroundService();
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('✓ Đã kích hoạt lại Dịch vụ Chạy Ngầm'),
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      }
+                    },
+                  ),
+
+                  // Item 2: Battery Optimization
+                  _buildGuideActionCard(
+                    isDark: isDark,
+                    title: 'Tối Ưu Hóa Pin (Doze Mode)',
+                    desc: _isIgnoringBattery
+                        ? 'Đã bật chế độ Không hạn chế pin. Ứng dụng sẽ không bị Android đóng băng khi tắt màn hình.'
+                        : 'Cần cấp quyền Bỏ qua tối ưu pin để CPU không bị ngắt kết nối khi điện thoại ngủ sâu.',
+                    icon: Icons.battery_charging_full_rounded,
+                    statusText: _isIgnoringBattery ? 'Đã tắt tối ưu (Tốt)' : 'Chưa tắt tối ưu',
+                    isOk: _isIgnoringBattery,
+                    btnText: 'Tắt tối ưu pin ngay',
+                    onAction: () async {
+                      await NotificationBridge.instance.requestIgnoreBatteryOptimizations();
+                      await Future<void>.delayed(const Duration(milliseconds: 500));
+                      _checkBatteryOptimization();
+                    },
+                  ),
+
+                  // Item 3: Autostart (Xiaomi, Oppo, Vivo, Samsung)
+                  _buildGuideActionCard(
+                    isDark: isDark,
+                    title: 'Tự Khởi Chạy (Autostart)',
+                    desc: 'Trên máy Xiaomi (HyperOS/MIUI), Oppo, Vivo, Samsung, bật quyền này để app tự khởi động lại khi reboot.',
+                    icon: Icons.power_settings_new_rounded,
+                    statusText: 'Cài đặt của hãng',
+                    isOk: true,
+                    btnText: 'Mở Cài Đặt Tự Khởi Chạy',
+                    onAction: () {
+                      NotificationBridge.instance.openAutostartSettings();
+                    },
+                  ),
+
+                  // Item 4: Lock App tip
+                  Container(
+                    margin: const EdgeInsets.only(top: 4, bottom: 16),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: isDark ? Colors.white10 : const Color(0xFFCBD5E1),
+                      ),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.lock_outline_rounded, size: 20, color: Color(0xFF0F766E)),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Mẹo Khóa App trong Đa Nhiệm (Recent Apps)',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 12.5,
+                                  color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                'Mở màn hình đa nhiệm (Recent Apps) ➔ Nhấn giữ ứng dụng chinhan-xT ➔ Chọn biểu tượng Ổ Khóa 🔒 để không bị nút "Xóa tất cả" dọn sạch.',
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  height: 1.35,
+                                  color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFF0F766E),
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                      onPressed: () => Navigator.pop(sheetCtx),
+                      child: const Text(
+                        'Đã Hiểu & Hoàn Tất',
+                        style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGuideActionCard({
+    required bool isDark,
+    required String title,
+    required String desc,
+    required IconData icon,
+    required String statusText,
+    required bool isOk,
+    required String btnText,
+    required VoidCallback onAction,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E293B).withValues(alpha: 0.6) : const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: isOk
+              ? (isDark ? const Color(0xFF10B981).withValues(alpha: 0.3) : const Color(0xFFA7F3D0))
+              : (isDark ? const Color(0xFFF59E0B).withValues(alpha: 0.3) : const Color(0xFFFDE68A)),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 20, color: isOk ? const Color(0xFF10B981) : const Color(0xFFF59E0B)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13.5,
+                    color: isDark ? Colors.white : const Color(0xFF0F172A),
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: isOk
+                      ? (isDark ? const Color(0xFF064E3B) : const Color(0xFFD1FAE5))
+                      : (isDark ? const Color(0xFF451A03) : const Color(0xFFFEF3C7)),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  statusText,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    color: isOk ? const Color(0xFF10B981) : const Color(0xFFD97706),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            desc,
+            style: TextStyle(
+              fontSize: 12,
+              height: 1.35,
+              color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+            ),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton(
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 9),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                side: BorderSide(
+                  color: isDark ? Colors.white24 : const Color(0xFFCBD5E1),
+                ),
+              ),
+              onPressed: onAction,
+              child: Text(
+                btnText,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                  color: isDark ? Colors.white : const Color(0xFF0F172A),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
+

@@ -1,0 +1,984 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Notification Listener - Nhóm Ngọng L/N</title>
+  <style>
+    :root {
+      --bg-color: #F8F9FA;
+      --card-bg: #FFFFFF;
+      --text-main: #0F172A;
+      --text-muted: #64748B;
+      --primary: #0F766E;
+      --primary-light: #CCFBF1;
+      --accent-green: #10B981;
+      --accent-green-bg: #ECFDF5;
+      --accent-orange: #EA580C;
+      --accent-orange-bg: #FFF7ED;
+      --border-color: #E2E8F0;
+      --shadow-sm: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+      --shadow-md: 0 12px 24px -4px rgba(15, 23, 42, 0.08);
+      --shadow-lg: 0 24px 48px -8px rgba(15, 23, 42, 0.14);
+      --radius-sm: 14px;
+      --radius-md: 22px;
+      --radius-lg: 32px;
+      --font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: var(--font-family);
+      background-color: #0B1120;
+      color: var(--text-main);
+      overflow: hidden;
+      height: 100vh;
+      width: 100vw;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Fixed 16:9 Presentation Stage with 3D Perspective */
+    #presentation-stage {
+      width: 100vw;
+      height: 100vh;
+      max-width: 1920px;
+      max-height: 1080px;
+      aspect-ratio: 16 / 9;
+      background-color: var(--bg-color);
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 0 100px rgba(0, 0, 0, 0.7);
+      display: flex;
+      flex-direction: column;
+      perspective: 1600px;
+      perspective-origin: center center;
+    }
+
+    /* ================= Dynamic Animated Mesh Background ================= */
+    .bg-orb {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(90px);
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0.65;
+      will-change: transform;
+    }
+
+    .bg-orb-1 {
+      top: -15%;
+      right: -8%;
+      width: 850px;
+      height: 850px;
+      background: radial-gradient(circle, rgba(16, 185, 129, 0.18) 0%, rgba(15, 118, 110, 0.08) 50%, transparent 70%);
+      animation: orb-drift-1 18s ease-in-out infinite alternate;
+    }
+
+    .bg-orb-2 {
+      bottom: -18%;
+      left: -10%;
+      width: 800px;
+      height: 800px;
+      background: radial-gradient(circle, rgba(15, 118, 110, 0.15) 0%, rgba(204, 251, 241, 0.18) 50%, transparent 70%);
+      animation: orb-drift-2 22s ease-in-out infinite alternate;
+    }
+
+    .bg-orb-3 {
+      top: 30%;
+      left: 38%;
+      width: 650px;
+      height: 650px;
+      background: radial-gradient(circle, rgba(234, 88, 12, 0.06) 0%, transparent 65%);
+      animation: orb-drift-3 16s ease-in-out infinite alternate;
+    }
+
+    @keyframes orb-drift-1 {
+      0% { transform: translate3d(0, 0, 0) scale(1); }
+      50% { transform: translate3d(-70px, 60px, 0) scale(1.12); }
+      100% { transform: translate3d(50px, -40px, 0) scale(0.92); }
+    }
+
+    @keyframes orb-drift-2 {
+      0% { transform: translate3d(0, 0, 0) scale(1); }
+      50% { transform: translate3d(80px, -60px, 0) scale(1.1); }
+      100% { transform: translate3d(-60px, 40px, 0) scale(0.9); }
+    }
+
+    @keyframes orb-drift-3 {
+      0% { transform: translate3d(0, 0, 0) scale(0.9); opacity: 0.03; }
+      50% { transform: translate3d(-50px, -40px, 0) scale(1.18); opacity: 0.08; }
+      100% { transform: translate3d(60px, 50px, 0) scale(1); opacity: 0.04; }
+    }
+
+    /* ================= 7-Second Periodic Light Beam Sweep ================= */
+    .stage-light-sweep {
+      position: absolute;
+      top: 0;
+      left: -160%;
+      width: 65%;
+      height: 100%;
+      background: linear-gradient(
+        105deg,
+        rgba(255, 255, 255, 0) 0%,
+        rgba(255, 255, 255, 0.02) 25%,
+        rgba(255, 255, 255, 0.32) 50%,
+        rgba(255, 255, 255, 0.02) 75%,
+        rgba(255, 255, 255, 0) 100%
+      );
+      transform: skewX(-22deg);
+      pointer-events: none;
+      z-index: 60;
+      animation: global-light-sweep 7s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+    }
+
+    @keyframes global-light-sweep {
+      0%, 18% {
+        left: -160%;
+      }
+      40% {
+        left: 200%;
+      }
+      41%, 100% {
+        left: 200%;
+      }
+    }
+
+    /* Top Progress Bar */
+    .progress-bar-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 6px;
+      background: rgba(226, 232, 240, 0.8);
+      z-index: 100;
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--primary), var(--accent-green));
+      width: 12.5%;
+      transition: width 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    /* Deck Container */
+    .deck-container {
+      flex: 1;
+      position: relative;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+    }
+
+    /* ================= High-End 3D Slide Transition ================= */
+    .slide {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      padding: 38px 60px 48px 60px;
+      display: flex;
+      flex-direction: column;
+      opacity: 0;
+      pointer-events: none;
+      transform: translate3d(0, 36px, -70px) scale(0.93);
+      filter: blur(10px);
+      transition: opacity 0.55s cubic-bezier(0.16, 1, 0.3, 1),
+                  transform 0.65s cubic-bezier(0.16, 1, 0.3, 1),
+                  filter 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+      will-change: transform, opacity, filter;
+    }
+
+    .slide.active {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translate3d(0, 0, 0) scale(1);
+      filter: blur(0px);
+      z-index: 10;
+    }
+
+    .slide.exit-left {
+      opacity: 0;
+      transform: translate3d(-90px, 0, -90px) scale(0.91) rotateY(-4deg);
+      filter: blur(8px);
+      transition: opacity 0.45s ease-out, transform 0.55s cubic-bezier(0.16, 1, 0.3, 1), filter 0.45s ease-out;
+    }
+
+    .slide.exit-right {
+      opacity: 0;
+      transform: translate3d(90px, 0, -90px) scale(0.91) rotateY(4deg);
+      filter: blur(8px);
+      transition: opacity 0.45s ease-out, transform 0.55s cubic-bezier(0.16, 1, 0.3, 1), filter 0.45s ease-out;
+    }
+
+    /* Slide Title Header */
+    .slide-title-wrap {
+      margin-bottom: 24px;
+    }
+
+    .slide-tag {
+      font-size: 16px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: var(--primary);
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .slide-tag::before {
+      content: "";
+      width: 20px;
+      height: 4px;
+      background: var(--primary);
+      border-radius: 2px;
+    }
+
+    .slide-title {
+      font-size: 40px;
+      font-weight: 900;
+      letter-spacing: -1px;
+      color: var(--text-main);
+      line-height: 1.2;
+    }
+
+    .slide-title .highlight {
+      color: var(--accent-orange);
+    }
+
+    /* Common Card Styling */
+    .keyword-card {
+      background: var(--card-bg);
+      border: 2px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 28px 30px;
+      box-shadow: var(--shadow-sm);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .card-title-35 {
+      font-size: 35px;
+      font-weight: 900;
+      color: var(--text-main);
+      line-height: 1.2;
+      margin-bottom: 20px;
+    }
+
+    .keyword-list {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      list-style: none;
+    }
+
+    .keyword-item {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      font-size: 25px;
+      font-weight: 700;
+      color: var(--text-main);
+      line-height: 1.3;
+    }
+
+    .kw-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 4px 12px;
+      border-radius: 10px;
+      font-size: 22px;
+      font-weight: 900;
+      flex-shrink: 0;
+    }
+
+    .badge-teal {
+      background: #CCFBF1;
+      color: #0F766E;
+    }
+
+    .kw-sub {
+      color: var(--text-muted);
+      font-weight: 500;
+      font-size: 23px;
+    }
+
+    /* ================= Slide 1: Cover ================= */
+    .cover-slide {
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+    }
+
+    .cover-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 28px;
+      background: var(--accent-green-bg);
+      border: 2px solid rgba(16, 185, 129, 0.4);
+      border-radius: 30px;
+      color: #047857;
+      font-weight: 900;
+      font-size: 22px;
+      margin-bottom: 24px;
+    }
+
+    .cover-title {
+      font-size: 78px;
+      font-weight: 900;
+      letter-spacing: -2px;
+      color: var(--text-main);
+      margin-bottom: 40px;
+      line-height: 1.1;
+    }
+
+    .cover-title span,
+    .thank-you-title span {
+      background: linear-gradient(135deg, #0F766E 0%, #10B981 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      display: inline-block;
+      animation: text-emerald-pulse 7s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+    }
+
+    @keyframes text-emerald-pulse {
+      0%, 20% {
+        filter: brightness(1) drop-shadow(0 0 0px transparent);
+      }
+      30% {
+        filter: brightness(1.35) drop-shadow(0 0 24px rgba(16, 185, 129, 0.75));
+        transform: scale(1.02);
+      }
+      42% {
+        filter: brightness(1) drop-shadow(0 0 0px transparent);
+        transform: scale(1);
+      }
+      100% {
+        filter: brightness(1) drop-shadow(0 0 0px transparent);
+        transform: scale(1);
+      }
+    }
+
+    .thank-you-title {
+      font-size: 60px;
+      font-weight: 900;
+      letter-spacing: -1.5px;
+      color: var(--text-main);
+      margin-bottom: 46px;
+      line-height: 1.2;
+      white-space: nowrap;
+      display: inline-block;
+    }
+
+    .team-title-cover {
+      font-size: 35px;
+      font-weight: 900;
+      color: var(--primary);
+      margin-bottom: 24px;
+      letter-spacing: -0.5px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      justify-content: center;
+    }
+
+    .team-title-cover::before,
+    .team-title-cover::after {
+      content: "";
+      width: 40px;
+      height: 3px;
+      background: rgba(15, 118, 110, 0.3);
+      border-radius: 2px;
+    }
+
+    .member-chips-container {
+      display: flex;
+      flex-direction: row;
+      flex-wrap: nowrap;
+      justify-content: center;
+      align-items: center;
+      gap: 16px;
+      width: 100%;
+      max-width: 1350px;
+    }
+
+    .member-chip {
+      background: white;
+      border: 2px solid var(--border-color);
+      box-shadow: var(--shadow-sm);
+      padding: 14px 24px;
+      border-radius: 18px;
+      font-size: 24px;
+      font-weight: 800;
+      color: #0F172A;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    /* ================= Slides 2, 3, 4, 7: Image Slides with Light Sweep ================= */
+    .slide.image-slide {
+      padding: 20px 48px 84px 48px;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .full-slide-image-box {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      position: relative;
+      overflow: hidden;
+      border-radius: 24px;
+      box-shadow: 0 20px 40px -8px rgba(15, 23, 42, 0.16);
+      border: 2px solid var(--border-color);
+      background: white;
+    }
+
+    .full-slide-image-box img {
+      max-width: 100%;
+      max-height: 100%;
+      width: auto;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+
+    /* 7-Second Diagonal Light Sheen on Images */
+    .full-slide-image-box::after,
+    .phone-frame::after {
+      content: "";
+      position: absolute;
+      top: -50%;
+      left: -140%;
+      width: 50%;
+      height: 200%;
+      background: linear-gradient(
+        105deg,
+        rgba(255, 255, 255, 0) 0%,
+        rgba(255, 255, 255, 0.08) 25%,
+        rgba(255, 255, 255, 0.55) 50%,
+        rgba(255, 255, 255, 0.08) 75%,
+        rgba(255, 255, 255, 0) 100%
+      );
+      transform: rotate(25deg);
+      pointer-events: none;
+      z-index: 10;
+      animation: image-shine-sweep 7s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+    }
+
+    @keyframes image-shine-sweep {
+      0%, 20% {
+        left: -140%;
+        opacity: 0;
+      }
+      21% {
+        opacity: 1;
+      }
+      45% {
+        left: 170%;
+        opacity: 1;
+      }
+      46%, 100% {
+        left: 170%;
+        opacity: 0;
+      }
+    }
+
+    /* ================= Slide 5: Live Demo ================= */
+    .demo-container {
+      display: flex;
+      gap: 60px;
+      justify-content: center;
+      align-items: center;
+      flex: 1;
+    }
+
+    .phone-frame {
+      background: white;
+      border: 10px solid #0F172A;
+      border-radius: 46px;
+      box-shadow: var(--shadow-lg);
+      overflow: hidden;
+      width: 290px;
+      height: 520px;
+      position: relative;
+    }
+
+    .phone-frame img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: top;
+      display: block;
+    }
+
+    .demo-info {
+      text-align: center;
+      margin-top: 14px;
+    }
+
+    .demo-pill {
+      display: inline-block;
+      padding: 4px 14px;
+      border-radius: 20px;
+      font-size: 18px;
+      font-weight: 800;
+      margin-bottom: 6px;
+    }
+
+    .demo-pill.waiting {
+      background: #E2E8F0;
+      color: #334155;
+    }
+
+    .demo-pill.success {
+      background: #D1FAE5;
+      color: #047857;
+    }
+
+    /* ================= Slide 6: Tài liệu & QR ================= */
+    .grid-doc {
+      display: grid;
+      grid-template-columns: 1.3fr 0.7fr;
+      gap: 32px;
+      flex: 1;
+      align-items: center;
+    }
+
+    .qr-box {
+      background: white;
+      border: 2px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 30px;
+      text-align: center;
+      box-shadow: var(--shadow-md);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .qr-img-wrapper {
+      width: 230px;
+      height: 230px;
+      padding: 12px;
+      background: white;
+      border: 2px solid var(--border-color);
+      border-radius: 20px;
+      margin-bottom: 16px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .qr-img-wrapper img {
+      width: 100%;
+      height: 100%;
+    }
+
+    /* Bottom Left Slide Counter Pill */
+    .bottom-left-counter {
+      position: absolute;
+      bottom: 24px;
+      left: 48px;
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(12px);
+      padding: 8px 20px;
+      border-radius: 30px;
+      box-shadow: var(--shadow-md);
+      border: 1.5px solid rgba(226, 232, 240, 0.8);
+      font-size: 20px;
+      font-weight: 900;
+      color: var(--primary);
+      letter-spacing: 1px;
+      z-index: 50;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .bottom-left-counter-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--accent-green);
+      box-shadow: 0 0 8px var(--accent-green);
+    }
+
+    /* Floating Navigation Controls */
+    .controls-bar {
+      position: absolute;
+      bottom: 24px;
+      right: 48px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      z-index: 50;
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(12px);
+      padding: 8px 16px;
+      border-radius: 30px;
+      box-shadow: var(--shadow-md);
+      border: 1.5px solid rgba(226, 232, 240, 0.8);
+    }
+
+    .btn-nav {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      border: none;
+      background: #F1F5F9;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 22px;
+      font-weight: 900;
+      transition: all 0.2s;
+    }
+
+    .btn-nav:hover {
+      background: var(--primary);
+      color: white;
+      transform: scale(1.08);
+    }
+
+    .btn-fullscreen {
+      font-size: 18px;
+      font-weight: 800;
+      padding: 0 16px;
+      border-radius: 20px;
+      height: 44px;
+      background: #F1F5F9;
+      border: none;
+      color: var(--text-main);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s;
+    }
+
+    .btn-fullscreen:hover {
+      background: #0F172A;
+      color: white;
+    }
+  </style>
+</head>
+<body>
+
+<div id="presentation-stage">
+  <!-- Dynamic Animated Mesh Background Orbs -->
+  <div class="bg-orb bg-orb-1"></div>
+  <div class="bg-orb bg-orb-2"></div>
+  <div class="bg-orb bg-orb-3"></div>
+
+  <!-- 7-Second Periodic Light Beam Sweep Layer -->
+  <div class="stage-light-sweep"></div>
+
+  <!-- Top Progress Bar -->
+  <div class="progress-bar-container">
+    <div class="progress-bar-fill" id="progressBar"></div>
+  </div>
+
+  <!-- Deck Slides -->
+  <div class="deck-container">
+
+    <!-- ================= SLIDE 1: BÌA ================= -->
+    <section class="slide cover-slide active" data-slide="1">
+      <div class="cover-pill">
+        <span>Lập trình thiết bị di động</span>
+      </div>
+      <h1 class="cover-title">Notification <span>Listener</span></h1>
+
+      <!-- Team Name above members -->
+      <div class="team-title-cover">Nhóm: Ngọng L/N</div>
+
+      <!-- Member chips on 1 line -->
+      <div class="member-chips-container">
+        <div class="member-chip">Nguyễn Chí Nhân</div>
+        <div class="member-chip">Bùi Nguyễn Công Nghiệp</div>
+        <div class="member-chip">Võ Thành Nhân</div>
+        <div class="member-chip">Lưu Văn Lương</div>
+      </div>
+    </section>
+
+    <!-- ================= SLIDE 2: GIỚI HẠN & GIẢI PHÁP ================= -->
+    <section class="slide image-slide" data-slide="2">
+      <div class="full-slide-image-box">
+        <img src="images/slide2_problem_solution.png" alt="Giới hạn và Giải pháp">
+      </div>
+    </section>
+
+    <!-- ================= SLIDE 3: KIẾN TRÚC PHẦN MỀM ================= -->
+    <section class="slide image-slide" data-slide="3">
+      <div class="full-slide-image-box">
+        <img src="images/slide3_architecture.png" alt="Luồng kiến trúc phần mềm">
+      </div>
+    </section>
+
+    <!-- ================= SLIDE 4: HỆ SINH THÁI TÍNH NĂNG ================= -->
+    <section class="slide image-slide" data-slide="4">
+      <div class="full-slide-image-box">
+        <img src="images/slide4_features.png" alt="Hệ sinh thái tính năng">
+      </div>
+    </section>
+
+    <!-- ================= SLIDE 5: LIVE DEMO ================= -->
+    <section class="slide" data-slide="5">
+      <div class="slide-title-wrap">
+        <div class="slide-tag">Thực Nghiệm Thực Tế</div>
+        <h2 class="slide-title">Thực Nghiệm <span class="highlight">Notification Listener</span> Trên Android</h2>
+      </div>
+
+      <div class="demo-container">
+        <!-- Mockup 1 -->
+        <div style="display: flex; flex-direction: column; align-items: center;">
+          <div class="phone-frame">
+            <img src="images/demo_waiting.png" alt="Trạng thái chờ thông báo">
+          </div>
+          <div class="demo-info">
+            <div class="demo-pill waiting">CHẾ ĐỘ NỀN</div>
+            <div class="card-title-35" style="margin-bottom: 0;">1. Chờ Lắng Nghe Ngầm</div>
+            <div class="keyword-item" style="justify-content: center; font-size: 23px; color: var(--text-muted); margin-top: 4px;">Service 24/7 · Chờ thông báo hệ thống</div>
+          </div>
+        </div>
+
+        <!-- Arrow -->
+        <div style="font-size: 56px; color: var(--primary); font-weight: 900; margin-bottom: 70px;">
+          ➔
+        </div>
+
+        <!-- Mockup 2 -->
+        <div style="display: flex; flex-direction: column; align-items: center;">
+          <div class="phone-frame">
+            <img src="images/demo_captured.png" alt="Bắt thông báo thành công">
+          </div>
+          <div class="demo-info">
+            <div class="demo-pill success">THÀNH CÔNG</div>
+            <div class="card-title-35" style="margin-bottom: 0;">2. Bắt & Bóc Tách Tức Thì</div>
+            <div class="keyword-item" style="justify-content: center; font-size: 23px; color: var(--text-muted); margin-top: 4px;">Xử lý tức thì · Trích xuất tiêu đề & nội dung</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= SLIDE 6: TÀI LIỆU & MÃ NGUỒN ================= -->
+    <section class="slide" data-slide="6">
+      <div class="slide-title-wrap">
+        <div class="slide-tag">Tài Liệu & Mã Nguồn</div>
+        <h2 class="slide-title">Hướng Dẫn Cài Đặt & <span class="highlight">Mã Nguồn GitHub</span></h2>
+      </div>
+
+      <div class="grid-doc">
+        <!-- Steps -->
+        <div class="keyword-card">
+          <div class="card-title-35" style="margin-bottom: 24px;">🚀 4 BƯỚC TRIỂN KHAI NHANH</div>
+          <ul class="keyword-list">
+            <li class="keyword-item">
+              <span class="kw-badge badge-teal">01</span>
+              <span>Clone Repo <span class="kw-sub">— git clone github.com/...</span></span>
+            </li>
+            <li class="keyword-item">
+              <span class="kw-badge badge-teal">02</span>
+              <span>Cài đặt <span class="kw-sub">— Chạy flutter run hoặc cài file APK</span></span>
+            </li>
+            <li class="keyword-item">
+              <span class="kw-badge badge-teal">03</span>
+              <span>Cấp quyền <span class="kw-sub">— Bật NotificationListenerService (Android 13+)</span></span>
+            </li>
+            <li class="keyword-item">
+              <span class="kw-badge badge-teal">04</span>
+              <span>Kiểm thử <span class="kw-sub">— flutter test (Bộ Unit Tests chạy tự động)</span></span>
+            </li>
+          </ul>
+        </div>
+
+        <!-- QR Code -->
+        <div class="qr-box">
+          <div class="qr-img-wrapper">
+            <img src="images/github_qr.svg" alt="GitHub QR Code">
+          </div>
+          <div class="card-title-35" style="margin-bottom: 4px;">Quét Mã QR</div>
+          <div class="keyword-item" style="font-size: 22px; color: var(--primary); margin-top: 6px; word-break: break-all;">
+            github.com/xT-chinhan/...
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= SLIDE 7: KIẾN TRÚC HỆ THỐNG TOÀN DIỆN ================= -->
+    <section class="slide image-slide" data-slide="7">
+      <div class="full-slide-image-box">
+        <img src="images/slide7_system_architecture.png" alt="Kiến trúc hệ thống">
+      </div>
+    </section>
+
+    <!-- ================= SLIDE 8: CẢM ƠN (CHỈ CÓ THẦY, KHÔNG RỚT HÀNG) ================= -->
+    <section class="slide cover-slide" data-slide="8">
+      <div class="cover-pill">
+        <span>Q&A · Thảo Luận</span>
+      </div>
+      <h1 class="thank-you-title">Cảm Ơn Thầy & Các Bạn <span>Đã Lắng Nghe!</span></h1>
+
+      <!-- Team Name above members -->
+      <div class="team-title-cover">Nhóm: Ngọng L/N</div>
+
+      <!-- Member chips on 1 line -->
+      <div class="member-chips-container">
+        <div class="member-chip">Nguyễn Chí Nhân</div>
+        <div class="member-chip">Bùi Nguyễn Công Nghiệp</div>
+        <div class="member-chip">Võ Thành Nhân</div>
+        <div class="member-chip">Lưu Văn Lương</div>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- Bottom Left Slide Counter Pill -->
+  <div class="bottom-left-counter">
+    <span class="bottom-left-counter-dot"></span>
+    <span id="slideCounter">SLIDE 1 / 8</span>
+  </div>
+
+  <!-- Bottom Right Floating Navigation Controls -->
+  <div class="controls-bar">
+    <button class="btn-nav" onclick="prevSlide()" title="Slide trước (←)">‹</button>
+    <button class="btn-nav" onclick="nextSlide()" title="Slide sau (→)">›</button>
+    <button class="btn-fullscreen" onclick="toggleFullscreen()" title="Toàn màn hình (F)">⛶ Trình Chiếu</button>
+  </div>
+</div>
+
+<script>
+  let currentSlide = 1;
+  const totalSlides = 8;
+  let isTransitioning = false;
+
+  function updateSlide(targetIndex, direction = 'next') {
+    if (targetIndex < 1 || targetIndex > totalSlides || targetIndex === currentSlide || isTransitioning) {
+      return;
+    }
+
+    isTransitioning = true;
+    const oldSlide = document.querySelector(`.slide[data-slide="${currentSlide}"]`);
+    const newSlide = document.querySelector(`.slide[data-slide="${targetIndex}"]`);
+
+    currentSlide = targetIndex;
+
+    // Apply high-end 3D directional exit animation
+    if (oldSlide) {
+      oldSlide.classList.remove('active');
+      oldSlide.classList.add(direction === 'next' ? 'exit-left' : 'exit-right');
+    }
+
+    // Animate new slide in with depth spring
+    if (newSlide) {
+      newSlide.classList.remove('exit-left', 'exit-right');
+      newSlide.classList.add('active');
+    }
+
+    // Cleanup exit classes after transition settles
+    setTimeout(() => {
+      document.querySelectorAll('.slide').forEach(s => {
+        if (!s.classList.contains('active')) {
+          s.classList.remove('exit-left', 'exit-right');
+        }
+      });
+      isTransitioning = false;
+    }, 600);
+
+    // Update Progress Bar
+    const progressPercent = (currentSlide / totalSlides) * 100;
+    document.getElementById('progressBar').style.width = progressPercent + '%';
+
+    // Update Bottom Left Counter
+    document.getElementById('slideCounter').innerText = `SLIDE ${currentSlide} / ${totalSlides}`;
+  }
+
+  function nextSlide() {
+    if (currentSlide < totalSlides) {
+      updateSlide(currentSlide + 1, 'next');
+    }
+  }
+
+  function prevSlide() {
+    if (currentSlide > 1) {
+      updateSlide(currentSlide - 1, 'prev');
+    }
+  }
+
+  function toggleFullscreen() {
+    const stage = document.getElementById('presentation-stage');
+    if (!document.fullscreenElement) {
+      if (stage.requestFullscreen) {
+        stage.requestFullscreen();
+      } else if (stage.webkitRequestFullscreen) {
+        stage.webkitRequestFullscreen();
+      }
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      }
+    }
+  }
+
+  // Keyboard navigation
+  window.addEventListener('keydown', (e) => {
+    switch (e.key) {
+      case 'ArrowRight':
+      case 'PageDown':
+      case ' ':
+        e.preventDefault();
+        nextSlide();
+      break;
+      case 'ArrowLeft':
+      case 'PageUp':
+        e.preventDefault();
+        prevSlide();
+      break;
+      case 'Home':
+        e.preventDefault();
+        updateSlide(1, 'prev');
+      break;
+      case 'End':
+        e.preventDefault();
+        updateSlide(totalSlides, 'next');
+      break;
+      case 'f':
+      case 'F':
+        e.preventDefault();
+        toggleFullscreen();
+      break;
+    }
+  });
+
+  // Touch Swipe for mobile/tablet preview
+  let touchStartX = 0;
+  let touchEndX = 0;
+
+  document.addEventListener('touchstart', e => {
+    touchStartX = e.changedTouches[0].screenX;
+  }, { passive: true });
+
+  document.addEventListener('touchend', e => {
+    touchEndX = e.changedTouches[0].screenX;
+    if (touchEndX < touchStartX - 50) nextSlide();
+    if (touchEndX > touchStartX + 50) prevSlide();
+  }, { passive: true });
+</script>
+
+</body>
+</html>

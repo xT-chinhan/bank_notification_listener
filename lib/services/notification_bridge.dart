@@ -116,6 +116,105 @@ class NotificationBridge {
     }
   }
 
+  /// Retrieve notifications that were captured and saved in Native persistent storage while the app was closed or killed.
+  Future<List<RawNotification>> getSavedNotifications() async {
+    if (kIsWeb) return [];
+    try {
+      final dynamic rawList =
+          await _methodChannel.invokeMethod<dynamic>('getSavedNotifications');
+      if (rawList is! List) return [];
+
+      final result = <RawNotification>[];
+      for (final item in rawList) {
+        if (item is Map) {
+          final map = Map<dynamic, dynamic>.from(item);
+          final rawTimestamp = map['timestamp'] ?? map['postTime'];
+          final parsedTimestamp = rawTimestamp is num
+              ? rawTimestamp.toInt()
+              : int.tryParse(rawTimestamp?.toString() ?? '') ??
+                  DateTime.now().millisecondsSinceEpoch;
+          final packageName = map['packageName']?.toString() ?? '';
+          final title = map['title']?.toString() ?? '';
+          final text = map['text']?.toString() ?? '';
+
+          result.add(RawNotification(
+            id: map['id']?.toString() ?? _uuid.v4(),
+            packageName: packageName,
+            title: title,
+            text: text,
+            subText: map['subText']?.toString(),
+            timestamp: parsedTimestamp,
+            isBankNotification: map['isBankNotification'] == true ||
+                BankNotificationParser.isBankApp(packageName, title, text),
+          ));
+        }
+      }
+      return result;
+    } on PlatformException catch (e) {
+      debugPrint('NotificationBridge: Error getting saved notifications: ${e.message}');
+      return [];
+    } catch (e) {
+      debugPrint('NotificationBridge: Unexpected error getting saved notifications: $e');
+      return [];
+    }
+  }
+
+  /// Clear persistent stored notifications in Native storage.
+  Future<bool> clearSavedNotifications() async {
+    if (kIsWeb) return true;
+    try {
+      final bool? result =
+          await _methodChannel.invokeMethod<bool>('clearSavedNotifications');
+      return result ?? false;
+    } catch (e) {
+      debugPrint('NotificationBridge: Error clearing saved notifications: $e');
+      return false;
+    }
+  }
+
+  /// Check if the app is currently excluded from Android battery optimizations.
+  Future<bool> isIgnoringBatteryOptimizations() async {
+    if (kIsWeb) return true;
+    try {
+      final bool? result =
+          await _methodChannel.invokeMethod<bool>('isIgnoringBatteryOptimizations');
+      return result ?? false;
+    } catch (e) {
+      debugPrint('NotificationBridge: Error checking battery optimization: $e');
+      return false;
+    }
+  }
+
+  /// Prompt the user to whitelist the app from battery optimizations (Doze mode bypass).
+  Future<void> requestIgnoreBatteryOptimizations() async {
+    if (kIsWeb) return;
+    try {
+      await _methodChannel.invokeMethod<void>('requestIgnoreBatteryOptimizations');
+    } catch (e) {
+      debugPrint('NotificationBridge: Error requesting battery optimization: $e');
+    }
+  }
+
+  /// Open vendor-specific autostart settings (Xiaomi, Oppo, Vivo, Samsung, Huawei).
+  Future<void> openAutostartSettings() async {
+    if (kIsWeb) return;
+    try {
+      await _methodChannel.invokeMethod<void>('openAutostartSettings');
+    } catch (e) {
+      debugPrint('NotificationBridge: Error opening autostart settings: $e');
+    }
+  }
+
+  /// Trigger the Native Foreground Service to start / re-verify.
+  Future<void> startForegroundService() async {
+    if (kIsWeb) return;
+    try {
+      await _methodChannel.invokeMethod<void>('startForegroundService');
+    } catch (e) {
+      debugPrint('NotificationBridge: Error starting foreground service: $e');
+    }
+  }
+
   /// Clean up resources if necessary.
   void dispose() {
     _nativeSubscription?.cancel();
